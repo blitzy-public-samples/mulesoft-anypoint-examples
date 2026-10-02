@@ -69,6 +69,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!-- Emits package-info.class only for a package-info.java that carries an annotation: D-086, D-153 -->
+                    <createMissingPackageInfoClass>false</createMissingPackageInfoClass>
+                </configuration>
             </plugin>
 
             <!-- unit and endpoint tests -->

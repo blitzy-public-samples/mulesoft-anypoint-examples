@@ -1,0 +1,5 @@
+cache-scope-with-fibonacci_favicon-filtered
+cache-scope-with-fibonacci_n-below-20-miss
+cache-scope-with-fibonacci_n-below-20-hit
+cache-scope-with-fibonacci_n-below-20-nocache
+cache-scope-with-fibonacci_n-20-or-more

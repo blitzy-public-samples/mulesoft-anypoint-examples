@@ -1,0 +1,2 @@
+document-integration-using-the-cmis-connector_upload-logo
+document-integration-using-the-cmis-connector_cmis-error

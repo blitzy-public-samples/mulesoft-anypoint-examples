@@ -1,0 +1,2 @@
+import-contacts-into-ms-dynamics_contacts-file
+import-contacts-into-ms-dynamics_contacts-file-failure

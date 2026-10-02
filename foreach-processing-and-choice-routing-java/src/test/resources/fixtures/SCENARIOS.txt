@@ -1,0 +1,17 @@
+foreach-processing-and-choice-routing_missing-name
+foreach-processing-and-choice-routing_missing-ssn
+foreach-processing-and-choice-routing_missing-amount
+foreach-processing-and-choice-routing_missing-term
+foreach-processing-and-choice-routing_amount-20000-plus
+foreach-processing-and-choice-routing_amount-below-20000
+foreach-processing-and-choice-routing_bank5-unreachable
+foreach-processing-and-choice-routing_lowest-quote
+foreach-processing-and-choice-routing_processing-error
+foreach-processing-and-choice-routing_credit-agency-soap
+foreach-processing-and-choice-routing_bank-soap-bank1
+foreach-processing-and-choice-routing_bank-soap-bank2
+foreach-processing-and-choice-routing_bank-soap-bank3
+foreach-processing-and-choice-routing_bank-soap-bank4
+foreach-processing-and-choice-routing_bank-soap-bank5
+foreach-processing-and-choice-routing_wsdl-credit-agency
+foreach-processing-and-choice-routing_wsdl-bank

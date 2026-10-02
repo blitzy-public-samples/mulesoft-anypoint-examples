@@ -1,0 +1,3 @@
+mule-component-bindings_twitter-search
+mule-component-bindings_stock-stats
+mule-component-bindings_wrong-port-404

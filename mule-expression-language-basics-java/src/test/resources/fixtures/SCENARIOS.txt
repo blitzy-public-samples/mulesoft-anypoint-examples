@@ -1,0 +1,7 @@
+mule-expression-language-basics_greet1
+mule-expression-language-basics_greet2-empty-username
+mule-expression-language-basics_greet2-username
+mule-expression-language-basics_greet3
+mule-expression-language-basics_greet4
+mule-expression-language-basics_greet5
+mule-expression-language-basics_greet6

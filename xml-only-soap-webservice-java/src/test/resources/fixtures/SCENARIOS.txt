@@ -1,0 +1,10 @@
+xml-only-soap-webservice_admit-patient
+xml-only-soap-webservice_admit-patient-without-dates
+xml-only-soap-webservice_patient-upsert
+xml-only-soap-webservice_patient-other-operation
+xml-only-soap-webservice_ehr-create-episode
+xml-only-soap-webservice_ehr-other-operation
+xml-only-soap-webservice_wsdl-admission
+xml-only-soap-webservice_wsdl-patient
+xml-only-soap-webservice_wsdl-ehr
+xml-only-soap-webservice_xsd-soa-message
