@@ -1,0 +1,21 @@
+# Listener port of HTTP_Listener_Configuration (D-065)
+http:
+  port: 8084
+# Host of HTTP_Listener_Configuration
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+# Embedded Undertow port and bind address
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+spring:
+  application:
+    name: http-request-response-with-logger-java
+  mvc:
+    # Dispatches TRACE requests to the handler mappings
+    dispatch-trace-request: true
+  web:
+    resources:
+      # Registers no static-resource handler
+      add-mappings: false

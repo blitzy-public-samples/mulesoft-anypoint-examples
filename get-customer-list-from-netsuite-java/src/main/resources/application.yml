@@ -1,0 +1,14 @@
+http:
+  port: 8081                       # D-065
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+netsuite:
+  account: TODO                    # TODO: supply the NetSuite account ID
+  oauth:
+    client-id: TODO                # TODO: supply the client ID of the NetSuite OAuth 2.0 client-credentials integration record
+    certificate-id: TODO           # TODO: supply the certificate ID of the OAuth 2.0 client-credentials (M2M) mapping
+    private-key-path: TODO         # TODO: supply the file path of the PKCS#8 PEM private key of that certificate

@@ -1,0 +1,16 @@
+http:
+  port: 8081                     # HTTP listener port (D-065)
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0                # HTTP listener host
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+spring:
+  mvc:
+    formcontent:
+      filter:
+        enabled: false           # request bodies reach the controller unparsed
+  servlet:
+    multipart:
+      enabled: false             # multipart request bodies reach the controller unparsed

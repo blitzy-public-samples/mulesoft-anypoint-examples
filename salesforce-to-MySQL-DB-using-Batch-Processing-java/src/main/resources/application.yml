@@ -1,0 +1,22 @@
+spring:
+  main:
+    web-application-type: none
+sfdc:
+  user: TODO  # TODO: supply the Salesforce username
+  password: TODO  # TODO: supply the Salesforce password
+  securityToken: TODO  # TODO: supply the Salesforce security token
+  key: TODO  # TODO: supply the Salesforce connected-app consumer key
+  secret: TODO  # TODO: supply the Salesforce connected-app consumer secret
+  login-url: https://login.salesforce.com  # TODO: use https://test.salesforce.com for a sandbox org
+mysql:
+  host: TODO  # TODO: supply the MySQL host
+  port: 3306
+  database: company
+  user: TODO  # TODO: supply the MySQL user
+  password: TODO  # TODO: supply the MySQL password
+poll:
+  frequency: 60
+polling:
+  enabled: true
+watermark:
+  store-dir: ./data/watermark

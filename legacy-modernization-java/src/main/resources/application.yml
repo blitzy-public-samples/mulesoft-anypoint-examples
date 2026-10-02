@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: legacy-modernization-java
+
+# HTTP_Listener_Configuration: address of the SOAP listener POST /OrderFulfillment
+listener:
+  http-listener-configuration:
+    port: 1080
+    host: 0.0.0.0
+
+# Embedded Undertow server bound to the listener address (D-010)
+server:
+  port: ${listener.http-listener-configuration.port}
+  address: ${listener.http-listener-configuration.host}
+  servlet:
+    encoding:
+      charset: UTF-8
+
+# LegacyFulfillment: directory of the ShippingOrder-<timestamp>.txt CSV files (D-060)
+# The endpoint's responseTimeout has no key (D-105)
+file:
+  legacy-fulfillment:
+    path: src/main/resources/Output

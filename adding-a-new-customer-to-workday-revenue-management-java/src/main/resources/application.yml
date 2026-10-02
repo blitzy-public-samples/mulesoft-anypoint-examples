@@ -1,0 +1,20 @@
+http:
+  port: 9090  # D-065
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+spring:
+  mvc:
+    throw-exception-if-no-handler-found: true
+    dispatch-trace-request: true  # TRACE is dispatched to Spring MVC (D-102)
+  web:
+    resources:
+      add-mappings: false
+wday:
+  hostname: TODO  # TODO: supply the Workday host name (D-012)
+  tenant: TODO  # TODO: supply the Workday tenant name (D-012)
+  user: TODO  # TODO: supply the Workday integration user name (D-012)
+  password: TODO  # TODO: supply the Workday integration user password (D-012)

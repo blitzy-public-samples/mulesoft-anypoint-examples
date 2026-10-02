@@ -1,0 +1,17 @@
+spring:
+  main:
+    web-application-type: none
+sfdc:
+  user: TODO  # TODO: supply the Salesforce username
+  password: TODO  # TODO: supply the Salesforce password
+  securityToken: TODO  # TODO: supply the Salesforce security token
+  key: TODO  # TODO: supply the Salesforce connected-app consumer key
+  secret: TODO  # TODO: supply the Salesforce connected-app consumer secret
+  login-url: https://login.salesforce.com  # TODO: use https://test.salesforce.com for a sandbox org
+watermark:
+  store-dir: ./data/watermark
+polling:
+  enabled: true
+poll:
+  frequency: 10
+  time-unit: SECONDS

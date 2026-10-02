@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: importing-a-CSV-file-into-Mongo-DB-java
+  main:
+    keep-alive: true
+  data:
+    mongodb:
+      database: ${database.name}
+database:
+  name: TODO  # TODO: supply the MongoDB database name
+  user: TODO  # TODO: supply the MongoDB user
+  password: TODO  # TODO: supply the MongoDB password
+file:
+  inbound-endpoint:
+    path: src/main/resources/input
+    polling-frequency: 1000
+polling:
+  enabled: true

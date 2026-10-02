@@ -1,0 +1,20 @@
+spring:
+  main:
+    web-application-type: none
+    keep-alive: true
+polling:
+  enabled: true
+file:
+  inbound-endpoint:
+    path: src/main/resources/input
+    move-to-directory: src/main/resources/output
+    polling-frequency: 10000
+dynamics:
+  service-url: TODO  # TODO: supply the Dataverse organization URL, e.g. https://<org>.crm.dynamics.com
+  connect-timeout: 30000
+  response-timeout: 60000
+  oauth:
+    tenant-id: TODO  # TODO: supply the Microsoft Entra tenant ID
+    client-id: TODO  # TODO: supply the Entra app registration client ID
+    client-secret: TODO  # TODO: supply the Entra app registration client secret
+    token-uri: https://login.microsoftonline.com/${dynamics.oauth.tenant-id}/oauth2/v2.0/token

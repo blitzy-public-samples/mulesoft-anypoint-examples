@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: importing-a-csv-file-into-ms-sharepoint-java
+  main:
+    web-application-type: none
+
+"Sharepoint.SiteUrl": TODO  # TODO: supply the SharePoint Online site URL, e.g. https://<COMPANY_NAME>.sharepoint.com
+csvImportFolder: TODO  # TODO: supply the folder to create under Shared Documents, e.g. my_folder
+
+sharepoint:
+  oauth:
+    tenant-id: TODO  # TODO: supply the Microsoft Entra tenant id (D-032)
+    client-id: TODO  # TODO: supply the Entra app registration client id (D-032)
+    client-secret: TODO  # TODO: supply the Entra app registration client secret (D-032)
+    token-uri: https://login.microsoftonline.com/${sharepoint.oauth.tenant-id}/oauth2/v2.0/token
+    scope: https://graph.microsoft.com/.default
+  graph:
+    base-url: https://graph.microsoft.com/v1.0
+
+# path, moveToDirectory and pollingFrequency of file:inbound-endpoint; its responseTimeout has no key (D-092)
+file:
+  inbound-endpoint:
+    path: src/main/resources/input
+    move-to-directory: src/main/resources/output
+    polling-frequency: 10000
+
+polling:
+  enabled: true

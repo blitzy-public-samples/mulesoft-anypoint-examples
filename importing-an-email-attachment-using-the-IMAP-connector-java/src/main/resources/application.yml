@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: importing-an-email-attachment-using-the-IMAP-connector-java
+imap:
+  host: TODO  # TODO: supply the IMAPS server host name
+  port: 993
+  user: TODO  # TODO: supply the IMAPS mailbox user, plain or percent-encoded
+  password: TODO  # TODO: supply the IMAPS mailbox password
+  check-frequency: 100
+  response-timeout: 10000
+file:
+  output-path: src/test/resources/output
+  output-pattern: orders.xml
+polling:
+  enabled: true

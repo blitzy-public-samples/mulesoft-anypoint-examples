@@ -1,0 +1,22 @@
+# Port of the HTTP_Listener_Configuration listener (D-065)
+http:
+  port: 8081
+# Embedded Undertow port (D-010)
+server:
+  port: ${http.port}
+# Bind address of the HTTP_Listener_Configuration listener
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+spring:
+  application:
+    name: filtering-a-message-java
+  mvc:
+    throw-exception-if-no-handler-found: true  # an unmatched path raises NoHandlerFoundException
+    dispatch-trace-request: true               # TRACE requests reach the handler mappings
+  web:
+    resources:
+      add-mappings: false                      # no static-resource handler
+  servlet:
+    multipart:
+      enabled: false                           # no multipart resolver

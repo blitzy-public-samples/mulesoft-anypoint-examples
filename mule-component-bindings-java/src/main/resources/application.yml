@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: mule-component-bindings-java
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+
+server:
+  port: ${listener.http-listener-configuration.port}
+  address: ${listener.http-listener-configuration.host}
+
+listener:
+  http-listener-configuration:
+    host: localhost
+    port: 8081
+  http-listener-configuration2:
+    host: localhost
+    port: 8180
+
+twitter:
+  accessKey: TODO  # TODO: supply the Twitter access token
+  accessSecret: TODO  # TODO: supply the Twitter access token secret
+  apiKey: TODO  # TODO: supply the Twitter API key
+  apiSecret: TODO  # TODO: supply the Twitter API secret
+  rest-base-url: https://api.twitter.com/1.1/
+  search:
+    query: AAPL
+    since: "2014-10-26"
+    until: "2014-11-04"
+
+stockstats:
+  stocklyticsApiKey: TODO  # TODO: supply the Stocklytics API key
+  sentiment140ApiKey: TODO  # TODO: supply the Sentiment140 app id (the registration email)
+  stocklytics-base-url: http://api.stocklytics.com/
+  sentiment140-base-url: http://www.sentiment140.com/api/

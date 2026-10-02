@@ -1,0 +1,24 @@
+server:
+  port: ${http.listener.port}
+  address: ${http.listener.host}
+http:
+  provider:
+    port: 8081
+  listener:
+    port: 8082
+    host: localhost
+oauth2-provider:
+  provider-name: SampleAPI
+  scopes: READ_RESOURCE POST_RESOURCE
+  token-ttl-seconds: 86400
+  client:
+    id: myclientid
+    name: Mule Bookstore
+    description: Mule-powered On-line Bookstore
+    secret: TODO  # TODO: supply the OAuth client secret
+    redirect-uri: "http://localhost*"
+    scopes: READ_RESOURCE POST_RESOURCE
+  resource-owner:
+    username: TODO  # TODO: supply the resource-owner user name
+    password: TODO  # TODO: supply the resource-owner password
+    authority: RESOURCE_OWNER

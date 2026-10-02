@@ -1,0 +1,39 @@
+http:
+  port: 8081                          # D-065
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+request:
+  http-request-configuration:
+    host: api.box.com
+    port: 443
+    protocol: HTTPS
+    connect-timeout: 30000
+    response-timeout: 10000
+    follow-redirects: true
+    tls:
+      key-store:
+        path: keystore.jks
+        type: JKS
+        password: ${keystore.key}
+        key-password: ${keystore.password}
+keystore:
+  key: TODO        # TODO: supply the keystore.jks store password
+  password: TODO   # TODO: supply the keystore.jks key password
+spring:
+  application:
+    name: proxying-a-rest-api-java
+  mvc:
+    formcontent:
+      filter:
+        enabled: false
+    dispatch-trace-request: true
+  servlet:
+    multipart:
+      enabled: false
+  web:
+    resources:
+      add-mappings: false

@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: importing-an-email-attachment-using-the-POP3-connector-java
+
+pop3:
+  host: TODO  # TODO: supply the POP3S server host
+  port: 995
+  user: TODO  # TODO: supply the mailbox user; a percent-encoded address such as receiveremailaddress%40gmail.com is accepted
+  password: TODO  # TODO: supply the mailbox password
+  # Mailbox poll interval in milliseconds
+  check-frequency: 100
+  # Extra Jakarta Mail Session properties, e.g. "[mail.pop3s.ssl.trust]": "*" (D-098)
+  session-properties: {}
+  # The original responseTimeout and validateConnections attributes have no key (D-099)
+
+file:
+  # Directory that receives the XML file, relative to the working directory
+  output-path: src/test/resources/output
+  # Name of the written XML file
+  output-pattern: orders.xml
+
+polling:
+  # Registers the @Scheduled mailbox poller
+  enabled: true

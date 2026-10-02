@@ -1,0 +1,17 @@
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+http:
+  port: 8082
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+sfdc:
+  key: TODO  # TODO: supply the Salesforce connected-app consumer key
+  secret: TODO  # TODO: supply the Salesforce connected-app consumer secret
+  oauth:
+    callback-port: 8081
+    callback-path: oauth2callback
+    callback-domain: localhost
+    authorization-url: https://login.salesforce.com/services/oauth2/authorize
+    access-token-url: https://login.salesforce.com/services/oauth2/token

@@ -1,0 +1,24 @@
+http:
+  port: 8081
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+spring:
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+cmis:
+  base-url: TODO  # TODO: supply the CMIS AtomPub service URL
+  username: TODO  # TODO: supply the CMIS user name
+  password: TODO  # TODO: supply the CMIS password
+  repository-id: default
+  document:
+    folder-path: "/okm:root/"
+    mime-type: image/jpg
+    object-type: "cmis:document"
+    versioning-state: NONE

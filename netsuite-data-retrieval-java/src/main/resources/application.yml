@@ -1,0 +1,38 @@
+# HTTP listener netsuite-api-httpListenerConfig [netsuite-data-retrieval/src/main/app/netsuite-api.xml:12]
+# and the router listener path /api/* [netsuite-data-retrieval/src/main/app/netsuite-api.xml:21].
+listener:
+  netsuite-api-http-listener-config:
+    host: 0.0.0.0
+    port: 8081
+    base-path: /api
+    connection-idle-timeout: 3000000  # milliseconds an idle persistent connection stays open (D-096)
+server:
+  port: ${listener.netsuite-api-http-listener-config.port}
+  address: ${listener.netsuite-api-http-listener-config.host}
+  undertow:
+    no-request-timeout: ${listener.netsuite-api-http-listener-config.connection-idle-timeout}  # D-096
+spring:
+  mvc:
+    throw-exception-if-no-handler-found: true  # an unmatched path raises NoHandlerFoundException, answered with the APIkit 404 (D-007)
+  web:
+    resources:
+      add-mappings: false  # no default static resource handler; the console files are served by ApiConsoleController (D-009)
+  autoconfigure:
+    exclude:  # no Spring Security filter chain, generated user or OAuth 2.0 client registration is auto-configured (D-097)
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration
+# NetSuite connection NetSuite__Login_Authentication [netsuite-data-retrieval/src/main/app/netsuite-api.xml:18],
+# reached through NetSuite REST Web Services with OAuth 2.0 client credentials (M2M) (D-015, D-016).
+netsuite:
+  account: TODO  # TODO: supply the NetSuite account ID
+  rest-base-url:  # empty: derived from netsuite.account as https://<account>.suitetalk.api.netsuite.com, <account> being netsuite.account lower-cased with _ replaced by - (1234567_SB1 -> 1234567-sb1) (D-016, D-094)
+  time-zone: America/Los_Angeles  # zone in which REST's UTC datetimes and full-dates are rendered (D-016)
+  connect-timeout: 30s  # connect timeout of each NetSuite REST and token request (D-095)
+  response-timeout: 600s  # response timeout of each NetSuite REST and token request (D-095)
+  oauth:
+    client-id: TODO  # TODO: supply the client ID of the NetSuite M2M integration record
+    certificate-id: TODO  # TODO: supply the certificate ID of the OAuth 2.0 client credentials mapping
+    private-key-path: TODO  # TODO: supply the path of the PKCS#8 PEM private key of that certificate
+    token-uri:  # empty: derived as <rest-base-url>/services/rest/auth/oauth2/v1/token, with an empty rest-base-url https://<account>.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token (D-016, D-094)
