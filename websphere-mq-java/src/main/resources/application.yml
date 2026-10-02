@@ -1,0 +1,25 @@
+server:
+  port: ${ajax-server.port}
+spring:
+  web:
+    resources:
+      add-mappings: false
+ajax-server:
+  port: 8086
+  path: /services/wmqExample
+  enqueue-channel: /services/wmqExample/enqueue
+  dequeue-channel: /services/wmqExample/dequeue
+wmq:
+  host: TODO  # TODO: supply the WebSphere MQ host name
+  port: 1414  # TODO: supply the queue manager listener port
+  username: TODO  # TODO: supply the WebSphere MQ user name
+  password: TODO  # TODO: supply the WebSphere MQ password
+  channel: TODO  # TODO: supply the server-connection channel name
+  queue: TODO  # TODO: supply the queue manager name
+  in-queue: in
+  out-queue: out
+  ajax:
+    cache-size: 500
+test-component:
+  append-string: " - processed"
+  wait-time: 15000

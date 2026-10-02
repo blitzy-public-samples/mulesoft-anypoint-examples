@@ -1,0 +1,18 @@
+spring:
+  main:
+    keep-alive: true
+smtp:
+  host: TODO  # TODO: supply the SMTP host (smtp.gmail.com for Gmail)
+  port: 587
+  user: TODO  # TODO: supply the SMTP user, percent-encoded (name%40gmail.com)
+  password: TODO  # TODO: supply the SMTP password, percent-encoded
+  response-timeout: 10000
+mail:
+  from: TODO  # TODO: supply the sender address
+  to: TODO  # TODO: supply the recipient address
+  subject: Export from Excel
+file:
+  input-path: src/main/resources/input
+  polling-frequency: 1000
+polling:
+  enabled: true

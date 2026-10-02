@@ -1,0 +1,38 @@
+# Configuration of soap-webservice-security-java.
+# Listener and request defaults are the original literals of mule-config.xml and service-clients.xml.
+
+# Embedded Undertow server bound to HTTP_Listener_Configuration1 (D-010, D-011)
+server:
+  port: ${listener.http-listener-configuration1.port}
+  address: ${listener.http-listener-configuration1.host}
+
+listener:
+  # HTTP_Listener_Configuration1: the six Greeter SOAP services under /services/* (D-011)
+  http-listener-configuration1:
+    port: 63081
+    host: 0.0.0.0
+    base-path: services
+  # HTTP_Listener_Configuration: the SecurityClients flow on /client, opened by AdditionalPortsConfig (D-011)
+  http-listener-configuration:
+    port: 63080
+    host: 0.0.0.0
+
+# HTTP_Request_Configuration: target of the six client calls of the SecurityClients flow
+request:
+  http-request-configuration:
+    host: 0.0.0.0
+    port: 63081
+    base-path: services
+
+# WS-Security keystore and user credentials (D-012)
+keystore:
+  password: TODO  # TODO: supply the password of keystore.jks
+wssecurity:
+  users:
+    joe: TODO  # TODO: supply the password of user joe
+    stan: TODO  # TODO: supply the password of user stan
+  wrong-password: TODO  # TODO: supply the wrong password sent for user joe
+saml:
+  issuer:
+    key:
+      password: TODO  # TODO: supply the password of the SAML issuer key joe

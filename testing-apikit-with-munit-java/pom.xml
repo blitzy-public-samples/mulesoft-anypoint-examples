@@ -108,6 +108,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <release>${java.version}</release>
+                    <!-- Emits package-info.class only for a package-info.java that carries an annotation (D-114) -->
+                    <createMissingPackageInfoClass>false</createMissingPackageInfoClass>
                 </configuration>
             </plugin>
             <!-- Unit and endpoint tests; *IT classes excluded -->
