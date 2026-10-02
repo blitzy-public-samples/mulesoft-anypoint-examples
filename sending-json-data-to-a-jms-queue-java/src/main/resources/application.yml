@@ -1,0 +1,23 @@
+http:
+  port: 8081                     # D-065
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+jms:
+  outbound-endpoint:
+    queue: sales
+spring:
+  artemis:
+    mode: embedded               # D-080
+    embedded:
+      persistent: false
+      queues: sales
+  mvc:
+    throw-exception-if-no-handler-found: true
+    dispatch-trace-request: true # D-089
+  web:
+    resources:
+      add-mappings: false

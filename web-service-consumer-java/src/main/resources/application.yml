@@ -1,0 +1,28 @@
+# Port of the HTTP listener that serves /orders and /inventory (D-065).
+http:
+  port: 8081
+
+# Address of the HTTP listener HTTP_Listener_Configuration.
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+
+# Client settings of the t-shirt SOAP service (Web_Service_Consumer).
+tshirt:
+  service-name: TshirtService
+  port-name: TshirtServicePort
+  service-address: http://tshirt-service.cloudhub.io
+  api-key: TODO  # TODO: supply the t-shirt service API key (D-012)
+  connect-timeout: 10000  # milliseconds
+  response-timeout: 10000  # milliseconds
+
+spring:
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false

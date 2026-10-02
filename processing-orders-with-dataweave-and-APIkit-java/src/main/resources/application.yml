@@ -1,0 +1,55 @@
+# Configuration of processing-orders-with-dataweave-and-APIkit-java.
+# The http, server, listener, request and file keys carry the placeholders and endpoint
+# attributes of currency.xml and books.xml, defaulting to the original literals.
+
+http:
+  # Listener port of currency-httpListenerConfig and port of HTTP_Request_Configuration (D-065)
+  port: 8081
+
+server:
+  # Undertow listener port: the currency-httpListenerConfig port
+  port: "${http.port}"
+  # Undertow bind address: the currency-httpListenerConfig host
+  address: "${listener.currency-http-listener-config.host}"
+
+listener:
+  currency-http-listener-config:
+    # Host of currency-httpListenerConfig
+    host: "0.0.0.0"
+
+request:
+  # HTTP_Request_Configuration of the OrderFlow currency lookup; the request port is server.port (D-054)
+  http-request-configuration:
+    # Host of the currency API request
+    host: localhost
+    # Base path of the currency API request
+    base-path: /api/
+    # Response timeout of the currency API request, in milliseconds
+    response-timeout: 10000
+
+file:
+  inbound:
+    # Directory polled by the OrderFlow file inbound endpoint
+    path: src/main/resources/input
+    # Poll interval of the OrderFlow file inbound endpoint, in milliseconds
+    polling-frequency: 1000
+  outbound:
+    # Directory of the OrderFlow file outbound endpoints
+    path: src/main/resources/output
+    # Output file name of the orders JSON written by OrderFlow
+    orders-output-pattern: orders.json
+    # Output file name of the CSV report written by OrderFlow
+    report-output-pattern: report.csv
+
+polling:
+  # Registers the @Scheduled OrderFile poller
+  enabled: true
+
+spring:
+  # APIkit 404 handling: an unmapped path raises NoHandlerFoundException or NoResourceFoundException,
+  # answered with 404 { "message": "Resource not found" }
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false

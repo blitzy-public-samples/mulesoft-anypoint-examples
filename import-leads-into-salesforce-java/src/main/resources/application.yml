@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: import-leads-into-salesforce-java
+  main:
+    web-application-type: none
+
+sfdc:
+  user: TODO  # TODO: supply the Salesforce username
+  password: TODO  # TODO: supply the Salesforce password
+  securityToken: TODO  # TODO: supply the Salesforce security token
+  key: TODO  # TODO: supply the connected-app consumer key (D-013)
+  secret: TODO  # TODO: supply the connected-app consumer secret (D-013)
+  login-url: https://login.salesforce.com  # TODO: use https://test.salesforce.com for a sandbox org
+
+polling:
+  enabled: true
+
+file:
+  inbound-endpoint:
+    path: src/main/resources/input
+    move-to-directory: src/main/resources/output
+    polling-frequency: 10000
+
+batch:
+  create-leads-batch:
+    max-failed-records: 1000
+    commit-size: 200

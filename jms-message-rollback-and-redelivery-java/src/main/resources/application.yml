@@ -1,0 +1,16 @@
+spring:
+  artemis:
+    mode: native
+    broker-url: TODO  # TODO: supply the Artemis broker URL, e.g. tcp://localhost:61616
+jms-redeliver:
+  queue: in
+  topic: topic1
+jms-connector:
+  max-redelivery: 5
+  persistent-delivery: true
+redelivery-policy:
+  maximum-redeliveries: 5
+  initial-redelivery-delay: 5000
+  redelivery-delay: 2000
+  use-exponential-back-off: false
+  back-off-multiplier: 2

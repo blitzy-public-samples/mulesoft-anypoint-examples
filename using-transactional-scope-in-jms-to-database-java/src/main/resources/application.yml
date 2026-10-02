@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: using-transactional-scope-in-jms-to-database-java
+  artemis:
+    mode: embedded
+    embedded:
+      enabled: true
+      persistent: false
+      queues: in,out
+  sql:
+    init:
+      mode: never
+jdbc:
+  url: TODO  # TODO: supply the MySQL JDBC URL including user and password, e.g. jdbc:mysql://<host>:3306/<database>?user=<user>&password=<password>
+active-mq:
+  max-redelivery: 2
+  inbound-queue: in
+  outbound-queue: out

@@ -1,0 +1,23 @@
+# Listener port of HTTP_Listener_Configuration (D-065)
+http:
+  port: 8080
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+# HTTP_Listener_Configuration host
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+# APIkit router api-config: listener base path, console path, RAML location (D-009)
+apikit:
+  api-config:
+    base-path: /api
+    console-path: console
+    raml: api/api.raml
+# Unmatched requests reach GlobalExceptionHandler; no static-resource handler
+spring:
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false

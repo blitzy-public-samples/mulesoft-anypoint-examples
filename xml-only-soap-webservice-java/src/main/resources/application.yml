@@ -1,0 +1,13 @@
+http:
+  port: 8081
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+request:
+  http-request-configuration:
+    host: 0.0.0.0
+    port: ${http.port}
+# spring.webservices.path is unset; MessageDispatcherServlet serves /* from the Java configuration (D-087)

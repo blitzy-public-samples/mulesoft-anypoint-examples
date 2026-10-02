@@ -1,0 +1,23 @@
+# Listener port of httpConnector; also the port in the Location header of POST /api/teams (D-065)
+http:
+  port: 8080
+# Embedded Undertow port and bind address
+server:
+  port: ${http.port}
+  address: ${listener.http-connector.host}
+# Host of the httpConnector listener
+listener:
+  http-connector:
+    host: 0.0.0.0
+# APIkit router leagues-config: RAML classpath location and console path under /api (D-009)
+apikit:
+  leagues-config:
+    raml: api/leagues.raml
+    console-path: console
+# Unmatched requests raise NoHandlerFoundException, answered by GlobalExceptionHandler with 404; no static-resource handler
+spring:
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false

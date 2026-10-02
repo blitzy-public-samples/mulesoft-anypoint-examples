@@ -1,0 +1,84 @@
+# Configuration of service-orchestration-and-choice-routing-java.
+# Key names follow the Mule global elements of fulfillment.xml and mule-config.xml;
+# defaults are the original literals.
+
+# Primary Undertow listener: docroot and AJAX channel port (D-011, D-027)
+server:
+  port: ${ajax-server.port}
+  address: ${ajax-server.host}
+
+# AJAX connector address http://0.0.0.0:8090/orders (D-027)
+# Docroot (resourceBase): classpath folder docroot/ (D-027)
+ajax-server:
+  port: 8090
+  host: 0.0.0.0
+  path: /orders
+
+# Extra Undertow listeners (D-011)
+listener:
+  # GET /populate
+  http-listener-configuration:
+    port: 8091
+    host: 0.0.0.0
+  # POST /samsung/orders, SOAP SamsungService
+  http-listener-configuration1:
+    port: 9090
+    host: 0.0.0.0
+  # POST /api
+  http-listener-configuration2:
+    port: 9999
+    host: 0.0.0.0
+  # POST /orders, SOAP IProcessOrder
+  http-listener-configuration3:
+    port: 1080
+    host: 0.0.0.0
+
+# Host of the outbound HTTP calls (HTTP_Request_Configuration)
+http-request-configuration:
+  host: 0.0.0.0
+
+# orderRequest SOAP call to POST /orders: response timeout in milliseconds
+order-request:
+  response-timeout: 10000000
+
+# inhouseOrder dispatch and listener
+inhouse-order:
+  # Reply wait of the request-response dispatch, in milliseconds
+  response-timeout: 10000
+  # Redeliveries before the redelivery-exceeded handler runs
+  max-redelivery-attempts: 3
+
+# Queue names (D-026)
+queues:
+  inhouse-order: inhouseOrder
+  audit: audit
+
+# Embedded in-process Derby XA data source (D-026)
+derby-data-source:
+  url: jdbc:derby:muleEmbeddedDB;create=true
+
+# JTA transaction manager (D-026)
+transaction-manager:
+  # Default transaction timeout, in seconds
+  default-timeout: 600
+  # Transaction reaper timeout, in milliseconds
+  tx-reaper-timeout: 1000000
+
+spring:
+  # In-VM XA broker, non-persistent (D-026)
+  artemis:
+    mode: embedded
+    embedded:
+      persistent: false
+      queues: inhouseOrder,audit
+  # No default static resource handlers; the docroot is served under ajax-server.path (D-027)
+  web:
+    resources:
+      add-mappings: false
+
+# Narayana JTA starter (D-026)
+narayana:
+  # Object store directory
+  log-dir: target/narayana
+  # Default transaction timeout, in seconds
+  default-timeout: ${transaction-manager.default-timeout}
