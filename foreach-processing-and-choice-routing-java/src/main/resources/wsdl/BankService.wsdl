@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions name="BankService"
+    targetNamespace="http://bank.loanbroker.example.mule.org/"
+    xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+    xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:tns="http://bank.loanbroker.example.mule.org/">
+  <wsdl:types>
+    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+        xmlns:tns="http://bank.loanbroker.example.mule.org/"
+        targetNamespace="http://bank.loanbroker.example.mule.org/"
+        elementFormDefault="unqualified" attributeFormDefault="unqualified" version="1.0">
+      <xs:element name="getLoanQuote" type="tns:getLoanQuote"/>
+      <xs:element name="getLoanQuoteResponse" type="tns:getLoanQuoteResponse"/>
+      <xs:complexType name="getLoanQuote">
+        <xs:sequence>
+          <xs:element name="arg0" type="tns:loanBrokerQuoteRequest" minOccurs="0"/>
+        </xs:sequence>
+      </xs:complexType>
+      <xs:complexType name="loanBrokerQuoteRequest">
+        <xs:sequence>
+          <xs:element name="creditProfile" type="tns:creditProfile" minOccurs="0"/>
+          <xs:element name="customerRequest" type="tns:customerQuoteRequest" minOccurs="0"/>
+          <xs:element name="loanQuote" type="tns:loanQuote" minOccurs="0"/>
+        </xs:sequence>
+      </xs:complexType>
+      <xs:complexType name="creditProfile">
+        <xs:sequence>
+          <xs:element name="creditHistory" type="xs:int"/>
+          <xs:element name="creditScore" type="xs:int"/>
+        </xs:sequence>
+      </xs:complexType>
+      <xs:complexType name="customerQuoteRequest">
+        <xs:sequence>
+          <xs:element name="customer" type="tns:customer" minOccurs="0"/>
+          <xs:element name="loanAmount" type="xs:double"/>
+          <xs:element name="loanDuration" type="xs:int"/>
+        </xs:sequence>
+      </xs:complexType>
+      <xs:complexType name="customer">
+        <xs:sequence>
+          <xs:element name="name" type="xs:string" minOccurs="0"/>
+          <xs:element name="ssn" type="xs:int"/>
+        </xs:sequence>
+      </xs:complexType>
+      <xs:complexType name="loanQuote">
+        <xs:sequence>
+          <xs:element name="bankName" type="xs:string" minOccurs="0"/>
+          <xs:element name="interestRate" type="xs:double"/>
+        </xs:sequence>
+      </xs:complexType>
+      <xs:complexType name="getLoanQuoteResponse">
+        <xs:sequence>
+          <xs:element name="return" type="tns:loanQuote" minOccurs="0"/>
+        </xs:sequence>
+      </xs:complexType>
+    </xs:schema>
+  </wsdl:types>
+  <wsdl:message name="getLoanQuote">
+    <wsdl:part name="parameters" element="tns:getLoanQuote"/>
+  </wsdl:message>
+  <wsdl:message name="getLoanQuoteResponse">
+    <wsdl:part name="parameters" element="tns:getLoanQuoteResponse"/>
+  </wsdl:message>
+  <wsdl:portType name="Bank">
+    <wsdl:operation name="getLoanQuote">
+      <wsdl:input name="getLoanQuote" message="tns:getLoanQuote"/>
+      <wsdl:output name="getLoanQuoteResponse" message="tns:getLoanQuoteResponse"/>
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="BankServiceSoapBinding" type="tns:Bank">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="getLoanQuote">
+      <soap:operation soapAction="" style="document"/>
+      <wsdl:input name="getLoanQuote">
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="getLoanQuoteResponse">
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="BankService">
+    <wsdl:port name="BankPort" binding="tns:BankServiceSoapBinding">
+      <soap:address location="http://localhost:10080/mule/TheBank1"/>
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>

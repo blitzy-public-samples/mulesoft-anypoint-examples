@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions name="DefaultCreditAgencyService"
+    targetNamespace="http://creditagency.loanbroker.example.mule.org/"
+    xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+    xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:tns="http://creditagency.loanbroker.example.mule.org/">
+  <wsdl:types>
+    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+        xmlns:tns="http://creditagency.loanbroker.example.mule.org/"
+        targetNamespace="http://creditagency.loanbroker.example.mule.org/"
+        elementFormDefault="unqualified" attributeFormDefault="unqualified" version="1.0">
+      <xs:element name="getCreditProfile" type="tns:getCreditProfile"/>
+      <xs:element name="getCreditProfileResponse" type="tns:getCreditProfileResponse"/>
+      <xs:complexType name="getCreditProfile">
+        <xs:sequence>
+          <xs:element name="arg0" type="tns:customer" minOccurs="0"/>
+        </xs:sequence>
+      </xs:complexType>
+      <xs:complexType name="customer">
+        <xs:sequence>
+          <xs:element name="name" type="xs:string" minOccurs="0"/>
+          <xs:element name="ssn" type="xs:int"/>
+        </xs:sequence>
+      </xs:complexType>
+      <xs:complexType name="getCreditProfileResponse">
+        <xs:sequence>
+          <xs:element name="return" type="tns:creditProfile" minOccurs="0"/>
+        </xs:sequence>
+      </xs:complexType>
+      <xs:complexType name="creditProfile">
+        <xs:sequence>
+          <xs:element name="creditHistory" type="xs:int"/>
+          <xs:element name="creditScore" type="xs:int"/>
+        </xs:sequence>
+      </xs:complexType>
+    </xs:schema>
+  </wsdl:types>
+  <wsdl:message name="getCreditProfile">
+    <wsdl:part name="parameters" element="tns:getCreditProfile"/>
+  </wsdl:message>
+  <wsdl:message name="getCreditProfileResponse">
+    <wsdl:part name="parameters" element="tns:getCreditProfileResponse"/>
+  </wsdl:message>
+  <wsdl:portType name="DefaultCreditAgency">
+    <wsdl:operation name="getCreditProfile">
+      <wsdl:input name="getCreditProfile" message="tns:getCreditProfile"/>
+      <wsdl:output name="getCreditProfileResponse" message="tns:getCreditProfileResponse"/>
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="DefaultCreditAgencyServiceSoapBinding" type="tns:DefaultCreditAgency">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="getCreditProfile">
+      <soap:operation soapAction="" style="document"/>
+      <wsdl:input name="getCreditProfile">
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="getCreditProfileResponse">
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="DefaultCreditAgencyService">
+    <wsdl:port name="DefaultCreditAgencyPort" binding="tns:DefaultCreditAgencyServiceSoapBinding">
+      <soap:address location="http://localhost:18080/mule/TheCreditAgencyService"/>
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>
