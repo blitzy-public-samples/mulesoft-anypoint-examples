@@ -1,0 +1,2 @@
+extracting-data-from-LDAP-directory_users-found
+extracting-data-from-LDAP-directory_no-users

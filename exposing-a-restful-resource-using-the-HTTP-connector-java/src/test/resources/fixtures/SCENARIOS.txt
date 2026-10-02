@@ -1,0 +1,5 @@
+exposing-a-restful-resource-using-the-HTTP-connector_list-persons
+exposing-a-restful-resource-using-the-HTTP-connector_create-person
+exposing-a-restful-resource-using-the-HTTP-connector_get-person-found
+exposing-a-restful-resource-using-the-HTTP-connector_get-person-missing-404
+exposing-a-restful-resource-using-the-HTTP-connector_get-person-non-numeric-500

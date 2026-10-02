@@ -1,0 +1,7 @@
+salesforce-to-MySQL-DB-using-Batch-Processing_contact-inserted
+salesforce-to-MySQL-DB-using-Batch-Processing_contact-updated
+salesforce-to-MySQL-DB-using-Batch-Processing_contact-error-logged
+salesforce-to-MySQL-DB-using-Batch-Processing_on-complete-logged
+salesforce-to-MySQL-DB-using-Batch-Processing_first-poll-default
+salesforce-to-MySQL-DB-using-Batch-Processing_poll-advances-watermark
+salesforce-to-MySQL-DB-using-Batch-Processing_poll-failure-unchanged

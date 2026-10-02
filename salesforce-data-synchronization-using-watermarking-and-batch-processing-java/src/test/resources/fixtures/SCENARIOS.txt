@@ -1,0 +1,6 @@
+salesforce-data-synchronization-using-watermarking-and-batch-processing_first-poll-default-yesterday
+salesforce-data-synchronization-using-watermarking-and-batch-processing_poll-advances-watermark
+salesforce-data-synchronization-using-watermarking-and-batch-processing_poll-no-records-unchanged
+salesforce-data-synchronization-using-watermarking-and-batch-processing_poll-failure-unchanged
+salesforce-data-synchronization-using-watermarking-and-batch-processing_record-logged
+salesforce-data-synchronization-using-watermarking-and-batch-processing_watermark-survives-restart
