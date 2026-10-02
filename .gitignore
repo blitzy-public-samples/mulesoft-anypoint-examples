@@ -62,5 +62,13 @@
 # Test credentials to be use locally only #
 # --------------------------------------- #
 **/src/test/resources/mule.test.properties
+**/src/test/resources/application-it.yml
+**/src/main/resources/application-local.yml
 **/pom.xml.releaseBackup
 **/release.properties
+
+# --------------------------------------- #
+# Runtime state of the converted projects #
+# --------------------------------------- #
+salesforce-data-synchronization-using-watermarking-and-batch-processing-java/data/
+salesforce-to-MySQL-DB-using-Batch-Processing-java/data/
