@@ -35,9 +35,9 @@ public class UpstreamRateLimitException extends RuntimeException {
     /**
      * Creates the exception for a rate-limit response and stores its {@code Retry-After} value.
      *
-     * <p>The value is stored as given, unparsed and untrimmed: delay-seconds or an HTTP-date. A
-     * {@code null} or blank value is stored as {@code null}, and {@link #retryAfter()} then returns
-     * an empty {@code Optional}.
+     * <p>The value is stored exactly as given, unparsed and untrimmed: delay-seconds, an HTTP-date, or
+     * an empty or whitespace-only value. Only {@code null} is stored as absent, and
+     * {@link #retryAfter()} then returns an empty {@code Optional}.
      *
      * @param message    detail message returned by {@link #getMessage()}
      * @param retryAfter the {@code Retry-After} value received with the response, or {@code null}
@@ -45,7 +45,7 @@ public class UpstreamRateLimitException extends RuntimeException {
      */
     public UpstreamRateLimitException(String message, String retryAfter, Throwable cause) {
         super(message, cause);
-        this.retryAfter = (retryAfter == null || retryAfter.isBlank()) ? null : retryAfter;
+        this.retryAfter = retryAfter;
     }
 
     /**

@@ -8,6 +8,11 @@ listener:
     port: 1080
     host: 0.0.0.0
 
+# Fulfillment_LegacySystemModernization: path of the SOAP listener on HTTP_Listener_Configuration
+fulfillment-legacy-system-modernization:
+  listener:
+    path: OrderFulfillment
+
 # Embedded Undertow server bound to the listener address (D-010)
 server:
   port: ${listener.http-listener-configuration.port}

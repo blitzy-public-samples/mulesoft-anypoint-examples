@@ -5,10 +5,11 @@ http:
 server:
   port: ${http.port}
   address: ${listener.http-connector.host}
-# Host of the httpConnector listener
+# Host and router base path /api/* of the httpConnector listener (D-140)
 listener:
   http-connector:
     host: 0.0.0.0
+    base-path: /api
 # APIkit router leagues-config: RAML classpath location and console path under /api (D-009)
 apikit:
   leagues-config:

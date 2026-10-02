@@ -6,6 +6,9 @@ listener:
 server:
   port: ${http.port}
   address: ${listener.http-listener-configuration.host}
+main:
+  listener:
+    path: /  # Listener path of flow main
 request:
   http-request-configuration:
     host: www.predic8.com

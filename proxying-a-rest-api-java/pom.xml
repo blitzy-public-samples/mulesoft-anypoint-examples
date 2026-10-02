@@ -93,7 +93,7 @@
                 </configuration>
             </plugin>
 
-            <!-- Coverage: agent, report and LINE covered ratio of at least 0.80 on the service and mapper packages, all within the test phase. -->
+            <!-- Coverage: prepare-agent attaches the agent to argLine at initialize; the report and the LINE covered ratio check of at least 0.80 on the service and mapper packages run at the test phase (D-049). -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -124,7 +124,9 @@
                                     <element>PACKAGE</element>
                                     <includes>
                                         <include>com.mulesoft.examples.proxying_a_rest_api.service</include>
+                                        <include>com.mulesoft.examples.proxying_a_rest_api.service.*</include>
                                         <include>com.mulesoft.examples.proxying_a_rest_api.mapper</include>
+                                        <include>com.mulesoft.examples.proxying_a_rest_api.mapper.*</include>
                                     </includes>
                                     <limits>
                                         <limit>
@@ -140,7 +142,7 @@
                 </executions>
             </plugin>
 
-            <!-- Build guard: Java 17 and no JAX-WS, CXF or Mule artefact anywhere in the dependency tree. -->
+            <!-- Build guard: Java 17 and no JAX-WS, CXF or Mule artefact anywhere in the dependency tree (D-050). -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

@@ -6,19 +6,21 @@ http:
 listener:
   http-listener-configuration:
     host: 0.0.0.0
+    order-tshirt-path: /orders  # Path of the orderTshirt listener (D-140)
+    list-inventory-path: /inventory  # Path of the listInventory listener (D-140)
 
 server:
   port: ${http.port}
   address: ${listener.http-listener-configuration.host}
 
-# Client settings of the t-shirt SOAP service (Web_Service_Consumer).
+# Client settings of the t-shirt SOAP service (Web_Service_Consumer), D-131.
 tshirt:
   service-name: TshirtService
   port-name: TshirtServicePort
   service-address: http://tshirt-service.cloudhub.io
   api-key: TODO  # TODO: supply the t-shirt service API key (D-012)
-  connect-timeout: 10000  # milliseconds
-  response-timeout: 10000  # milliseconds
+  connect-timeout: 30000  # milliseconds (D-131)
+  response-timeout: 10000  # milliseconds (D-131)
 
 spring:
   mvc:

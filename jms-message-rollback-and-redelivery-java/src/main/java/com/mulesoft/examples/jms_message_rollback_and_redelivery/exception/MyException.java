@@ -14,7 +14,6 @@ package com.mulesoft.examples.jms_message_rollback_and_redelivery.exception;
  * <p>The listener rolls back the transacted session when this exception is in the cause chain,
  * and the broker then redelivers the message. {@link #getError()} returns the stored error text:
  * {@code "test"} for the no-argument constructor, otherwise the text passed to the constructor.
- * The copyright header above is the original's, kept as-is (D-048).
  */
 public class MyException extends Exception {
 

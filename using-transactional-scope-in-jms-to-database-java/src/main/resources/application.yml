@@ -11,7 +11,7 @@ spring:
     init:
       mode: never
 jdbc:
-  url: TODO  # TODO: supply the MySQL JDBC URL including user and password, e.g. jdbc:mysql://<host>:3306/<database>?user=<user>&password=<password>
+  url: TODO  # TODO: supply the MySQL JDBC URL including user and password, e.g. jdbc:mysql://<host>:3306/<database>?user=<user>&password=<password> (D-012)
 active-mq:
   max-redelivery: 2
   inbound-queue: in

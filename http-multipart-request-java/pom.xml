@@ -83,6 +83,7 @@
                 </configuration>
             </plugin>
 
+            <!-- Coverage report and LINE coverage gate on service and mapper at the test phase (D-049). -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -114,7 +115,9 @@
                                     <element>PACKAGE</element>
                                     <includes>
                                         <include>com.mulesoft.examples.http_multipart_request.service</include>
+                                        <include>com.mulesoft.examples.http_multipart_request.service.*</include>
                                         <include>com.mulesoft.examples.http_multipart_request.mapper</include>
+                                        <include>com.mulesoft.examples.http_multipart_request.mapper.*</include>
                                     </includes>
                                     <limits>
                                         <limit>
@@ -130,6 +133,7 @@
                 </executions>
             </plugin>
 
+            <!-- Java 17 floor and the banned JAX-WS, CXF and Mule artefacts (D-050). -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

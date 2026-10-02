@@ -88,7 +88,7 @@
                 </configuration>
             </plugin>
 
-            <!-- Coverage -->
+            <!-- Coverage (D-049) -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -137,7 +137,7 @@
                 </executions>
             </plugin>
 
-            <!-- Java version and banned dependencies -->
+            <!-- Java version and banned dependencies (D-050) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

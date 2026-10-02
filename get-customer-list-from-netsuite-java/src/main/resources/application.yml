@@ -6,6 +6,7 @@ server:
 listener:
   http-listener-configuration:
     host: 0.0.0.0
+    path: /customers               # D-140
 netsuite:
   account: TODO                    # TODO: supply the NetSuite account ID
   oauth:

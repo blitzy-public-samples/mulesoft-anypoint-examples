@@ -6,6 +6,7 @@ http:
 listener:
   http-listener-configuration:
     host: 0.0.0.0
+    path: /
 sfdc:
   key: TODO  # TODO: supply the Salesforce connected-app consumer key
   secret: TODO  # TODO: supply the Salesforce connected-app consumer secret

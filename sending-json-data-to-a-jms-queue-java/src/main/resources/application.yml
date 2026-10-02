@@ -6,6 +6,7 @@ server:
 listener:
   http-listener-configuration:
     host: 0.0.0.0
+    path: sales                  # D-140
 jms:
   outbound-endpoint:
     queue: sales

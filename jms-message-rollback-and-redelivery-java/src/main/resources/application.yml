@@ -1,7 +1,7 @@
 spring:
   artemis:
     mode: native
-    broker-url: TODO  # TODO: supply the Artemis broker URL, e.g. tcp://localhost:61616
+    broker-url: TODO  # TODO: supply the Artemis broker URL, e.g. tcp://localhost:61616 (D-012)
 jms-redeliver:
   queue: in
   topic: topic1

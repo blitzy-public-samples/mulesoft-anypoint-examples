@@ -6,8 +6,16 @@ listener:
 server:
   port: ${http.port}
   address: ${listener.http-listener-configuration.host}
+retrieve-all-persons-flow:
+  listener:
+    path: /person
 store-person-flow:
   location-prefix: http://0.0.0.0:8081/person/
+  listener:
+    path: /person
+retrieve-person-flow:
+  listener:
+    path: "/person/{personId}"
 spring:
   mvc:
     throw-exception-if-no-handler-found: true

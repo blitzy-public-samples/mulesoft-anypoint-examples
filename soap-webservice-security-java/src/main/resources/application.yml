@@ -17,12 +17,49 @@ listener:
     port: 63080
     host: 0.0.0.0
 
+# Listener paths of the six Greeter SOAP service flows under listener.http-listener-configuration1.base-path
+unsecure-service-flow:
+  listener:
+    path: unsecure
+username-token-service-flow:
+  listener:
+    path: username
+username-token-signed-service-flow:
+  listener:
+    path: signed
+username-token-encrypted-service-flow:
+  listener:
+    path: encrypted
+saml-token-service-flow:
+  listener:
+    path: saml
+signed-saml-token-service-flow:
+  listener:
+    path: signedsaml
+
 # HTTP_Request_Configuration: target of the six client calls of the SecurityClients flow
 request:
   http-request-configuration:
     host: 0.0.0.0
     port: 63081
     base-path: services
+
+# SecurityClients: path of its listener on HTTP_Listener_Configuration, and paths of its six client calls under request.http-request-configuration.base-path
+security-clients:
+  listener:
+    path: client
+  invoke-unsecure-web-service:
+    path: unsecure
+  invoke-username-token-web-service:
+    path: username
+  invoke-username-token-signed-web-service:
+    path: signed
+  invoke-username-token-encrypted-web-service:
+    path: encrypted
+  invoke-saml-token-web-service:
+    path: saml
+  invoke-saml-token-signed-web-service:
+    path: signedsaml
 
 # WS-Security keystore and user credentials (D-012)
 keystore:

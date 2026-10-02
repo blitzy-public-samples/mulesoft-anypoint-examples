@@ -7,14 +7,27 @@ import io.undertow.servlet.handlers.ServletRequestContext;
  * embedded Undertow (D-010).
  *
  * <p>Responses for which no phrase is set carry Undertow's standard phrase for their status code,
- * for example {@code 200 OK}. A caller sets the status first, for example through a
- * {@code ResponseEntity}, and then calls {@link #set(String)}:
+ * for example {@code 200 OK}. {@link #set(String)} stores the phrase on the Undertow exchange of
+ * the request handled on the calling thread. When the response is committed, Undertow writes the
+ * stored phrase after the status code the response carries at that point. Setting the status code
+ * before or after the call leaves the stored phrase in place.
+ *
+ * <p>Status set on the servlet response, then the phrase:
  *
  * <pre>{@code
- * ResponseEntity<String> response = ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+ * response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
  * ReasonPhrase.set("Invalid input data");
- * return response;
  * }</pre>
+ *
+ * <p>Phrase set by a handler that returns a {@code ResponseEntity}; Spring MVC applies the
+ * entity's status to the servlet response after the handler returns:
+ *
+ * <pre>{@code
+ * ReasonPhrase.set("Invalid input data");
+ * return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+ * }</pre>
+ *
+ * <p>Both status lines read {@code HTTP/1.1 400 Invalid input data}.
  *
  * <p>The class holds no state and is not instantiable.
  */

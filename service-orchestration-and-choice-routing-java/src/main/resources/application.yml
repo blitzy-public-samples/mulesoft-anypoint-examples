@@ -20,26 +20,43 @@ listener:
   http-listener-configuration:
     port: 8091
     host: 0.0.0.0
+    # Path of the databaseInitialisation listener (D-140)
+    path: populate
   # POST /samsung/orders, SOAP SamsungService
   http-listener-configuration1:
     port: 9090
     host: 0.0.0.0
+    # Path of the samsungService listener (D-140)
+    path: samsung/orders
   # POST /api
   http-listener-configuration2:
     port: 9999
     host: 0.0.0.0
+    # Path of the priceService listener (D-140)
+    path: api
   # POST /orders, SOAP IProcessOrder
   http-listener-configuration3:
     port: 1080
     host: 0.0.0.0
+    # Path of the orderService listener (D-140)
+    path: orders
 
 # Host of the outbound HTTP calls (HTTP_Request_Configuration)
 http-request-configuration:
   host: 0.0.0.0
 
-# orderRequest SOAP call to POST /orders: response timeout in milliseconds
+# orderRequest SOAP call to POST /orders: path, and response timeout in milliseconds (D-140)
 order-request:
+  path: ${listener.http-listener-configuration3.path}
   response-timeout: 10000000
+
+# orderProxy SOAP call to POST /orders: path (D-140)
+order-proxy:
+  path: ${listener.http-listener-configuration3.path}
+
+# samsungWebServiceClient SOAP call to POST /samsung/orders: path (D-140)
+samsung-web-service-client:
+  path: ${listener.http-listener-configuration1.path}
 
 # inhouseOrder dispatch and listener
 inhouse-order:
@@ -47,6 +64,8 @@ inhouse-order:
   response-timeout: 10000
   # Redeliveries before the redelivery-exceeded handler runs
   max-redelivery-attempts: 3
+  # Path template of the Invoke Price Service GET request on port 9999; {productId} is the order item's productId (D-140, D-067)
+  price-request-path: "api/prices/{productId}"
 
 # Queue names (D-026)
 queues:

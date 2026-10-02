@@ -6,11 +6,14 @@ listener:
 server:
   port: ${http.port}
   address: ${listener.http-listener-configuration.host}
+ldap-flow1:
+  listener:
+    path: /
 ldap:
   dn: TODO  # TODO: supply the bind DN of the LDAP directory
   password: TODO  # TODO: supply the bind password for ldap.dn
   port: TODO  # TODO: supply the port of the LDAP server
-  url: ldap://localhost:${ldap.port}/dc=my-domain,dc=com
+  url: TODO  # TODO: supply the LDAP connection URL with its base DN (D-012)
   search:
     base-dn: ou=people
     filter: "(objectClass=*)"

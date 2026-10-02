@@ -16,9 +16,7 @@ import org.springframework.stereotype.Component;
  * Decides whether an order qualifies for the free-membership discount.
  *
  * <p>Ported from the {@code custom-filter} class of {@code filteringFlow1} in
- * {@code filtering-a-message/src/main/app/filtering.xml}, with its thresholds unchanged and its
- * copyright header kept (D-048). The duplicate
- * {@code filtering-a-message/src/FreeMembershipDiscountFilter.java} is not carried (D-037).
+ * {@code filtering-a-message/src/main/app/filtering.xml}, with its thresholds unchanged.
  * {@code DiscountService} calls {@link #accept(Map)} with the parsed JSON request; the bean holds
  * no state.
  */

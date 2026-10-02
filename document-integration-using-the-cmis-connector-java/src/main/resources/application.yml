@@ -22,3 +22,5 @@ cmis:
     mime-type: image/jpg
     object-type: "cmis:document"
     versioning-state: NONE
+  listener:
+    path: cmis

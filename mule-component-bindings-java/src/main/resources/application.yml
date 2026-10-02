@@ -19,6 +19,14 @@ listener:
     host: localhost
     port: 8180
 
+mule-component-bindings-flow1:
+  listener:
+    path: /
+
+stock-service-flow:
+  listener:
+    path: "/api/*"
+
 twitter:
   accessKey: TODO  # TODO: supply the Twitter access token
   accessSecret: TODO  # TODO: supply the Twitter access token secret

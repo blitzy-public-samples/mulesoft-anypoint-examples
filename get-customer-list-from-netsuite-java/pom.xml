@@ -26,7 +26,7 @@
     </properties>
 
     <dependencies>
-        <!-- Spring MVC on embedded Undertow -->
+        <!-- Spring MVC on embedded Undertow (D-010) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -116,7 +116,7 @@
                 </executions>
             </plugin>
 
-            <!-- Coverage report over all classes; LINE coverage rule over service and mapper classes -->
+            <!-- Coverage report over all classes; LINE coverage rule over service and mapper classes (D-049) -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -164,7 +164,7 @@
                 </executions>
             </plugin>
 
-            <!-- Java 17 and banned JAX-WS, CXF and Mule artefacts, including transitive ones -->
+            <!-- Java 17 and banned JAX-WS, CXF and Mule artefacts, including transitive ones (D-050) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

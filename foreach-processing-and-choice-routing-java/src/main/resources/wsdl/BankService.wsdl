@@ -62,13 +62,13 @@
   <wsdl:message name="getLoanQuoteResponse">
     <wsdl:part name="parameters" element="tns:getLoanQuoteResponse"/>
   </wsdl:message>
-  <wsdl:portType name="Bank">
+  <wsdl:portType name="BankService">
     <wsdl:operation name="getLoanQuote">
       <wsdl:input name="getLoanQuote" message="tns:getLoanQuote"/>
       <wsdl:output name="getLoanQuoteResponse" message="tns:getLoanQuoteResponse"/>
     </wsdl:operation>
   </wsdl:portType>
-  <wsdl:binding name="BankServiceSoapBinding" type="tns:Bank">
+  <wsdl:binding name="BankServiceSoapBinding" type="tns:BankService">
     <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
     <wsdl:operation name="getLoanQuote">
       <soap:operation soapAction="" style="document"/>

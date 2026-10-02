@@ -5,6 +5,10 @@ http:
 listener:
   http-listener-configuration:
     host: 0.0.0.0
+# Listener path of flow EchoFlow
+echo-flow:
+  listener:
+    path: "/*"
 # Embedded Undertow port and bind address
 server:
   port: ${http.port}

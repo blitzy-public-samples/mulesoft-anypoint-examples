@@ -4,7 +4,7 @@ package com.mulesoft.examples.netsuite_data_retrieval.exception;
  * Raised when NetSuite cannot be reached or does not answer in time: a connection failure, a socket or
  * response timeout, or a {@code WebClientRequestException} during a NetSuite REST call.
  *
- * <p>The NetSuite client makes exactly one outbound attempt per operation and never retries it (D-020).
+ * <p>For a timeout or connectivity failure the NetSuite client does not retry the failed call (D-020).
  * The message names the failed operation, for example {@code NetSuite unavailable: queryIds customer},
  * and the cause carries the underlying I/O or timeout failure.
  *

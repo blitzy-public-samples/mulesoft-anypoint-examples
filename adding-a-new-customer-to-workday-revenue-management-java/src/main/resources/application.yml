@@ -3,6 +3,7 @@ http:
 listener:
   http-listener-configuration:
     host: 0.0.0.0
+    path: /  # D-140
 server:
   port: ${http.port}
   address: ${listener.http-listener-configuration.host}

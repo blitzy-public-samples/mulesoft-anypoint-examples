@@ -6,8 +6,13 @@ server:
 listener:
   http-listener-configuration:
     host: 0.0.0.0
+    admit-patient-service-path: AdmissionService
+    patient-service-path: PatientService
+    ehr-service-path: EHRService
 request:
   http-request-configuration:
     host: 0.0.0.0
     port: ${http.port}
+    invoke-patient-service-path: ${listener.http-listener-configuration.patient-service-path}
+    invoke-ehr-service-path: ${listener.http-listener-configuration.ehr-service-path}
 # spring.webservices.path is unset; MessageDispatcherServlet serves /* from the Java configuration (D-087)

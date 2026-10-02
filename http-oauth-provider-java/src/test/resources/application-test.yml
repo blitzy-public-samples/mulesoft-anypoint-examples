@@ -1,0 +1,9 @@
+oauth2-provider:
+  resource-owner:
+    # resource owner of the embedded provider (D-012)
+    username: test-owner
+    password: test-owner-password
+  client:
+    # client of the embedded provider (D-012)
+    id: myclientid
+    secret: test-client-secret

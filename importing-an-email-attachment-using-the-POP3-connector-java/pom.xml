@@ -121,6 +121,7 @@
                             <goal>check</goal>
                         </goals>
                         <configuration>
+                            <haltOnFailure>true</haltOnFailure>
                             <!-- service and mapper classes only -->
                             <includes>
                                 <include>**/service/**</include>
@@ -178,19 +179,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <!-- Active whenever -Dtest selects tests: the coverage floor is reported without failing the build (D-082) -->
-        <profile>
-            <id>single-test-selection</id>
-            <activation>
-                <property>
-                    <name>test</name>
-                </property>
-            </activation>
-            <properties>
-                <jacoco.haltOnFailure>false</jacoco.haltOnFailure>
-            </properties>
-        </profile>
-    </profiles>
 </project>

@@ -119,7 +119,9 @@
                                     <element>PACKAGE</element>
                                     <includes>
                                         <include>com.mulesoft.examples.document_integration_using_the_cmis_connector.service</include>
+                                        <include>com.mulesoft.examples.document_integration_using_the_cmis_connector.service.*</include>
                                         <include>com.mulesoft.examples.document_integration_using_the_cmis_connector.mapper</include>
+                                        <include>com.mulesoft.examples.document_integration_using_the_cmis_connector.mapper.*</include>
                                     </includes>
                                     <limits>
                                         <limit>

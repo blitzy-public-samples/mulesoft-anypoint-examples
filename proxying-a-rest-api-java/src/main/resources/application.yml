@@ -6,6 +6,9 @@ listener:
 server:
   port: ${http.port}
   address: ${listener.http-listener-configuration.host}
+rest-api-proxy:
+  listener:
+    path: "/*"
 request:
   http-request-configuration:
     host: api.box.com

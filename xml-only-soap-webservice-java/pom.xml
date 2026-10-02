@@ -76,12 +76,6 @@
             <artifactId>spring-ws-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- AssertJ XML assertions for mapper and endpoint tests -->
-        <dependency>
-            <groupId>org.xmlunit</groupId>
-            <artifactId>xmlunit-assertj</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>

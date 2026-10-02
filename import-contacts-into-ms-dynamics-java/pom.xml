@@ -94,7 +94,7 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- coverage report over all classes; LINE coverage check over service and mapper packages -->
+            <!-- coverage report over all classes; LINE coverage check over service and mapper packages (D-049) -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -141,7 +141,7 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Java 17 floor; bans JAX-WS, CXF and Mule artefacts, transitive ones included -->
+            <!-- Java 17 floor; bans JAX-WS, CXF and Mule artefacts, transitive ones included (D-050) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

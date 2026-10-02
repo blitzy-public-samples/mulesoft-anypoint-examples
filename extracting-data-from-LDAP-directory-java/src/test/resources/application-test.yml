@@ -1,0 +1,5 @@
+ldap:
+  dn: cn=Manager,dc=my-domain,dc=com
+  password: in-memory-test-password
+  port: "0"
+  url: ldap://localhost:${ldap.port}/dc=my-domain,dc=com

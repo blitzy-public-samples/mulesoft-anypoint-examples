@@ -138,7 +138,9 @@
                                     <element>PACKAGE</element>
                                     <includes>
                                         <include>com.mulesoft.examples.querying_a_mysql_database.service</include>
+                                        <include>com.mulesoft.examples.querying_a_mysql_database.service.*</include>
                                         <include>com.mulesoft.examples.querying_a_mysql_database.mapper</include>
+                                        <include>com.mulesoft.examples.querying_a_mysql_database.mapper.*</include>
                                     </includes>
                                     <limits>
                                         <limit>

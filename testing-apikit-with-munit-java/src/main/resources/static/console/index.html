@@ -4,10 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>API Console</title>
-<!-- Page layout: fonts, margins, response wrapping, button spacing -->
+<!-- Page layout and control states: fonts, margins, response wrapping, button spacing, focus, hover, active, disabled, loading and error (D-141) -->
 <style>
   :root {
     --console-space: 0.5rem;
+    --console-focus-color: #0b57d0;
+    --console-error-color: #b3261e;
   }
   *, *::before, *::after {
     box-sizing: border-box;
@@ -37,6 +39,38 @@
     white-space: pre-wrap;
     overflow-wrap: break-word;
   }
+  a:hover {
+    text-decoration-thickness: 0.125em;
+  }
+  a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--console-focus-color);
+    outline-offset: 2px;
+  }
+  button:where(:enabled) {
+    cursor: pointer;
+  }
+  button:enabled:hover {
+    filter: brightness(0.95);
+  }
+  button:enabled:active {
+    filter: brightness(0.85);
+  }
+  button:disabled, input:disabled, textarea:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  [aria-busy=true], [aria-busy=true] * {
+    cursor: progress;
+  }
+  [aria-busy=true] {
+    opacity: 0.6;
+  }
+  [aria-invalid=true] {
+    outline: 2px solid var(--console-error-color);
+  }
+  [aria-invalid=true]:focus-visible {
+    box-shadow: 0 0 0 2px var(--console-error-color);
+  }
 </style>
 </head>
 <body>
@@ -61,10 +95,10 @@
     <h3>Status</h3>
     <div id="try-it-status" aria-live="polite"></div>
     <h3>Headers</h3>
-    <pre id="try-it-headers"></pre>
+    <pre id="try-it-headers" aria-live="polite"></pre>
     <h3>Body</h3>
     <!-- Response body output of Try It (D-009) -->
-    <pre id="try-it-body"></pre>
+    <pre id="try-it-body" aria-live="polite"></pre>
   </div>
   <script src="console.js"></script>
 </body>

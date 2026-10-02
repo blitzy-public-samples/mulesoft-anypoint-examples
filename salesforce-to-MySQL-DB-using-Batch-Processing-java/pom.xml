@@ -169,7 +169,9 @@
                                     <element>PACKAGE</element>
                                     <includes>
                                         <include>com.mulesoft.examples.salesforce_to_mysql_db_using_batch_processing.service</include>
+                                        <include>com.mulesoft.examples.salesforce_to_mysql_db_using_batch_processing.service.*</include>
                                         <include>com.mulesoft.examples.salesforce_to_mysql_db_using_batch_processing.mapper</include>
+                                        <include>com.mulesoft.examples.salesforce_to_mysql_db_using_batch_processing.mapper.*</include>
                                     </includes>
                                     <limits>
                                         <limit>

@@ -113,7 +113,9 @@
                                     <element>PACKAGE</element>
                                     <includes>
                                         <include>com.mulesoft.examples.importing_a_csv_file_into_ms_sharepoint.service</include>
+                                        <include>com.mulesoft.examples.importing_a_csv_file_into_ms_sharepoint.service.*</include>
                                         <include>com.mulesoft.examples.importing_a_csv_file_into_ms_sharepoint.mapper</include>
+                                        <include>com.mulesoft.examples.importing_a_csv_file_into_ms_sharepoint.mapper.*</include>
                                     </includes>
                                     <limits>
                                         <limit>

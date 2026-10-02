@@ -3,6 +3,9 @@ http:
 listener:
   http-listener-configuration:
     host: 0.0.0.0                # HTTP listener host
+choice-error-handling-flow1:
+  listener:
+    path: /                      # Listener path of flow choice-error-handlingFlow1
 server:
   port: ${http.port}
   address: ${listener.http-listener-configuration.host}

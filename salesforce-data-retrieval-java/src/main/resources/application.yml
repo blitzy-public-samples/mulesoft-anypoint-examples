@@ -8,6 +8,8 @@ http:
 listener:
   http-listener-configuration:
     host: 0.0.0.0
+    show-form-flow-path: /
+    salesforce-data-retrieval-flow-path: /
 
 spring:
   mvc:

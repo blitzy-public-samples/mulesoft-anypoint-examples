@@ -192,7 +192,9 @@
                                     <element>PACKAGE</element>
                                     <includes>
                                         <include>com.mulesoft.examples.soap_webservice_security.service</include>
+                                        <include>com.mulesoft.examples.soap_webservice_security.service.*</include>
                                         <include>com.mulesoft.examples.soap_webservice_security.mapper</include>
+                                        <include>com.mulesoft.examples.soap_webservice_security.mapper.*</include>
                                     </includes>
                                     <limits>
                                         <limit>

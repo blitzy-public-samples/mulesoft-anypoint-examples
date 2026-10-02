@@ -160,7 +160,7 @@
                 </executions>
             </plugin>
 
-            <!-- Java 17 and the banned JAX-WS, CXF, Mule, Jersey and Tomcat artefacts: D-050 -->
+            <!-- Java 17 and the banned JAX-WS, CXF, Mule and Tomcat artefacts: D-050, D-085 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
@@ -185,7 +185,6 @@
                                         <exclude>org.jvnet.jax-ws-commons:*</exclude>
                                         <exclude>org.mule*:*</exclude>
                                         <exclude>com.mulesoft*:*</exclude>
-                                        <exclude>org.glassfish.jersey*:*</exclude>
                                         <exclude>org.apache.tomcat.embed:*</exclude>
                                     </excludes>
                                 </bannedDependencies>

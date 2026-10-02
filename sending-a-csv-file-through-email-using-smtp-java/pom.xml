@@ -83,7 +83,7 @@
                 </configuration>
             </plugin>
 
-            <!-- line coverage of the service and mapper packages -->
+            <!-- line coverage of the service and mapper packages, checked at the test phase (D-049) -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -115,7 +115,9 @@
                                     <element>PACKAGE</element>
                                     <includes>
                                         <include>com.mulesoft.examples.sending_a_csv_file_through_email_using_smtp.service</include>
+                                        <include>com.mulesoft.examples.sending_a_csv_file_through_email_using_smtp.service.*</include>
                                         <include>com.mulesoft.examples.sending_a_csv_file_through_email_using_smtp.mapper</include>
+                                        <include>com.mulesoft.examples.sending_a_csv_file_through_email_using_smtp.mapper.*</include>
                                     </includes>
                                     <limits>
                                         <limit>
@@ -131,7 +133,7 @@
                 </executions>
             </plugin>
 
-            <!-- Java version and banned-dependency checks -->
+            <!-- Java version and banned-dependency checks (D-050) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

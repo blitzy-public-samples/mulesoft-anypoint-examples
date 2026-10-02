@@ -7,12 +7,18 @@ http:
   listener:
     port: 8082
     host: localhost
+protected-authcode-flow:
+  listener:
+    path: /resources
+redirect-flow:
+  listener:
+    path: /redirect
 oauth2-provider:
   provider-name: SampleAPI
   scopes: READ_RESOURCE POST_RESOURCE
   token-ttl-seconds: 86400
   client:
-    id: myclientid
+    id: TODO  # TODO: supply the OAuth client ID (D-012)
     name: Mule Bookstore
     description: Mule-powered On-line Bookstore
     secret: TODO  # TODO: supply the OAuth client secret

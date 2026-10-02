@@ -16,6 +16,8 @@ listener:
   currency-http-listener-config:
     # Host of currency-httpListenerConfig
     host: "0.0.0.0"
+    # Base path of the currency-main APIkit router listener /api/* (D-140)
+    base-path: /api
 
 request:
   # HTTP_Request_Configuration of the OrderFlow currency lookup; the request port is server.port (D-054)
@@ -24,6 +26,8 @@ request:
     host: localhost
     # Base path of the currency API request
     base-path: /api/
+    # Path of the Get Currencies request (D-140)
+    path: /currencies
     # Response timeout of the currency API request, in milliseconds
     response-timeout: 10000
 

@@ -156,17 +156,6 @@
                 </configuration>
             </plugin>
 
-            <!-- Unit and endpoint tests; *IT classes excluded -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>**/*IT.java</exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
-
             <!-- JAXB types generated from samsung.wsdl into com.mulesoft.se.samsung (D-028) -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -186,6 +175,17 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+
+            <!-- Unit and endpoint tests; *IT classes excluded -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*IT.java</exclude>
+                    </excludes>
+                </configuration>
             </plugin>
 
             <!-- Coverage: LINE covered ratio of at least 0.80 on service and mapper classes at the test phase (D-049) -->

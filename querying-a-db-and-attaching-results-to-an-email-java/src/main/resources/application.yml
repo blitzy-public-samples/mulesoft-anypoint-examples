@@ -18,6 +18,10 @@ listener:
   http-listener-configuration:
     host: 0.0.0.0
 
+attachments-flow1:
+  listener:
+    path: /
+
 server:
   port: ${http.port}
   address: ${listener.http-listener-configuration.host}

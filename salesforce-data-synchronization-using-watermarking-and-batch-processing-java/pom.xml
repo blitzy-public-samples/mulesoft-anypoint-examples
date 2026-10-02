@@ -142,7 +142,9 @@
                                     <element>PACKAGE</element>
                                     <includes>
                                         <include>*.service</include>
+                                        <include>*.service.*</include>
                                         <include>*.mapper</include>
+                                        <include>*.mapper.*</include>
                                     </includes>
                                     <limits>
                                         <limit>

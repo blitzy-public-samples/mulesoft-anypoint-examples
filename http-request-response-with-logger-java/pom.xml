@@ -36,7 +36,7 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        <!-- Undertow replaces Tomcat; the tomcat-embed-el this starter brings is the Jakarta EL library, not the Tomcat server -->
+        <!-- Undertow replaces Tomcat; the tomcat-embed-el this starter brings is the Jakarta EL library, not the Tomcat server (D-010, D-085) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-undertow</artifactId>
@@ -59,7 +59,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <release>17</release>
-                    <!-- Emits package-info.class only for a package-info.java that carries an annotation -->
+                    <!-- Emits package-info.class only for a package-info.java that carries an annotation (D-086) -->
                     <createMissingPackageInfoClass>false</createMissingPackageInfoClass>
                 </configuration>
             </plugin>
@@ -72,6 +72,7 @@
                     </excludes>
                 </configuration>
             </plugin>
+            <!-- Coverage: agent, report over all classes, and LINE covered ratio of at least 0.80 on service and mapper classes checked at the test phase (D-049) -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -118,6 +119,7 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- Java 17 and banned JAX-WS, CXF and Mule artefacts, including transitive ones (D-050) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

@@ -1,0 +1,7 @@
+oauth2-provider:
+  client:
+    id: TODO  # TODO: supply the value from http-oauth-provider/src/main/app/http-oauth-provider.xml:28
+    secret: TODO  # TODO: supply the value from http-oauth-provider/src/main/app/http-oauth-provider.xml:28
+  resource-owner:
+    username: TODO  # TODO: supply the value from http-oauth-provider/src/main/app/http-oauth-provider.xml:16
+    password: TODO  # TODO: supply the value from http-oauth-provider/src/main/app/http-oauth-provider.xml:16

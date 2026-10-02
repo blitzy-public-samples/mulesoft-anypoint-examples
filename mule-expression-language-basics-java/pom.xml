@@ -113,7 +113,9 @@
                                     <element>PACKAGE</element>
                                     <includes>
                                         <include>com.mulesoft.examples.mule_expression_language_basics.service</include>
+                                        <include>com.mulesoft.examples.mule_expression_language_basics.service.*</include>
                                         <include>com.mulesoft.examples.mule_expression_language_basics.mapper</include>
+                                        <include>com.mulesoft.examples.mule_expression_language_basics.mapper.*</include>
                                     </includes>
                                     <limits>
                                         <limit>

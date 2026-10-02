@@ -27,6 +27,7 @@
     </properties>
 
     <dependencies>
+        <!-- Spring MVC on embedded Undertow; Tomcat excluded (D-010) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

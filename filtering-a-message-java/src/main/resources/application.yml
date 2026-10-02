@@ -8,6 +8,10 @@ server:
 listener:
   http-listener-configuration:
     host: 0.0.0.0
+# Listener path of flow filteringFlow1
+filtering-flow1:
+  listener:
+    path: /
 spring:
   application:
     name: filtering-a-message-java
