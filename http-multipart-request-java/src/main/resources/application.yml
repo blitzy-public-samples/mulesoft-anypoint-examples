@@ -1,0 +1,26 @@
+http:
+  port: 8081  # Listener port of HTTP_Listener_Configuration (D-065)
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0  # Listener host of HTTP_Listener_Configuration
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+file:
+  outbound-endpoint:
+    path: /tmp  # Directory the uploaded file is written to (D-161)
+spring:
+  servlet:
+    multipart:
+      max-file-size: -1  # No size limit on an uploaded part (D-161)
+      max-request-size: -1  # No size limit on a multipart request (D-161)
+  mvc:
+    throw-exception-if-no-handler-found: true  # An unmatched path raises NoHandlerFoundException (D-162)
+    dispatch-options-request: true  # OPTIONS requests reach the handler mappings (D-162)
+    dispatch-trace-request: true  # TRACE requests reach the handler mappings (D-162)
+  web:
+    resources:
+      add-mappings: false  # No static resource mapping (D-162)
+  autoconfigure:
+    # /error is an unmatched path like any other (D-162)
+    exclude: org.springframework.boot.autoconfigure.web.servlet.error.ErrorMvcAutoConfiguration

@@ -1,0 +1,10 @@
+websphere-mq_enqueue
+websphere-mq_process-appends
+websphere-mq_process-failure-rolled-back
+websphere-mq_dequeue-live-two-subscribers
+websphere-mq_dequeue-cached-before-subscribe
+websphere-mq_dequeue-cache-overflow
+websphere-mq_dequeue-dropped-without-subscriber
+websphere-mq_unsubscribe
+websphere-mq_docroot-entry
+websphere-mq_page-enqueue-and-receive

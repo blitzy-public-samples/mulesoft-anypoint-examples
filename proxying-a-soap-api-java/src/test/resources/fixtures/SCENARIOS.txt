@@ -1,0 +1,2 @@
+proxying-a-soap-api_proxy-soap-call
+proxying-a-soap-api_proxy-soap-fault
