@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: querying-a-db-and-attaching-results-to-an-email-java
+  sql:
+    init:
+      mode: never
+  mvc:
+    throw-exception-if-no-handler-found: true
+    dispatch-trace-request: true
+  web:
+    resources:
+      add-mappings: false
+
+http:
+  port: 8081
+
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+
+jdbc:
+  url: TODO  # TODO: supply the JDBC URL of the MySQL company database, including user and password
+
+smtp:
+  host: TODO  # TODO: supply the SMTP server host
+  port: TODO  # TODO: supply the SMTP server port
+  user: TODO  # TODO: supply the URL-encoded SMTP user name, for example sender%40gmail.com
+  password: TODO  # TODO: supply the URL-encoded SMTP password
+  response-timeout: 10000
+
+mail:
+  from: TODO  # TODO: supply the sender address
+  to: TODO  # TODO: supply the recipient address or comma-separated addresses
+  subject: TODO  # TODO: supply the mail subject
