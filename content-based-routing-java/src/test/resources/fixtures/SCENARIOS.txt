@@ -1,0 +1,4 @@
+content-based-routing_favicon-filtered
+content-based-routing_spanish
+content-based-routing_french
+content-based-routing_default-language

@@ -1,0 +1,8 @@
+implementing-a-choice-exception-strategy_valid
+implementing-a-choice-exception-strategy_invalid-email-filtered
+implementing-a-choice-exception-strategy_units-below-1-400
+implementing-a-choice-exception-strategy_price-negative-400
+implementing-a-choice-exception-strategy_units-non-numeric-400
+implementing-a-choice-exception-strategy_email-missing-400
+implementing-a-choice-exception-strategy_units-missing-400
+implementing-a-choice-exception-strategy_malformed-json-500

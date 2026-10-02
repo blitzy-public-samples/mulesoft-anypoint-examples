@@ -96,6 +96,8 @@
                 <configuration>
                     <release>17</release>
                     <encoding>${project.build.sourceEncoding}</encoding>
+                    <!-- Emits package-info.class only for a package-info.java that carries an annotation: D-086, D-118 -->
+                    <createMissingPackageInfoClass>false</createMissingPackageInfoClass>
                 </configuration>
             </plugin>
 
