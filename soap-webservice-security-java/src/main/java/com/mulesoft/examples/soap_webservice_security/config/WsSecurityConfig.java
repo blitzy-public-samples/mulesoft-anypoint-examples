@@ -626,13 +626,6 @@ public class WsSecurityConfig implements WsConfigurer {
         /** Number of causes of a validation failure searched for a {@link WSSecurityException}. */
         private static final int MAX_CAUSE_DEPTH = 16;
 
-        /**
-         * Writes the WS-Security SOAP 1.1 fault of {@code ex} into the response of {@code messageContext}.
-         *
-         * @param ex             the validation failure
-         * @param messageContext the message context whose response receives the fault
-         * @return {@code false}, ending the request processing
-         */
         /** Whether WSS4J validates the subject confirmation of received SAML assertions. */
         private final boolean validateSamlSubjectConfirmation;
 
@@ -659,6 +652,13 @@ public class WsSecurityConfig implements WsConfigurer {
             return requestData;
         }
 
+        /**
+         * Writes the WS-Security SOAP 1.1 fault of {@code ex} into the response of {@code messageContext}.
+         *
+         * @param ex             the validation failure
+         * @param messageContext the message context whose response receives the fault
+         * @return {@code false}, ending the request processing
+         */
         @Override
         protected boolean handleValidationException(WsSecurityValidationException ex, MessageContext messageContext) {
             WSSecurityException cause = wsSecurityCause(ex);

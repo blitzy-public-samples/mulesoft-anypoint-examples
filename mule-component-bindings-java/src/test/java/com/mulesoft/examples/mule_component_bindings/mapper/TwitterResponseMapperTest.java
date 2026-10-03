@@ -14,7 +14,8 @@ import com.mulesoft.examples.mule_component_bindings.model.Tweet;
 import twitter4j.v1.Status;
 
 /**
- * Unit tests of {@link TwitterResponseMapper#toTweets(List)}, with no Spring application context.
+ * Unit tests of {@link TwitterResponseMapper#toTweets(List)}, with no Spring application context
+ * (D-694).
  *
  * <p>Each test builds the mapper with {@code new TwitterResponseMapper()} and the statuses as Mockito
  * mocks of the {@code twitter4j.v1.Status} interface of twitter4j 4.1.2 (D-033), stubbing only
