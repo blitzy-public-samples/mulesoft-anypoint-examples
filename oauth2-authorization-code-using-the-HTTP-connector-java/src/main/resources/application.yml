@@ -1,0 +1,55 @@
+listener:
+  http-listener-configuration:
+    host: localhost
+    port: 8081
+server:
+  address: "${listener.http-listener-configuration.host}"
+  port: "${listener.http-listener-configuration.port}"
+spring:
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+  ssl:
+    bundle:
+      jks:
+        tls-context:
+          keystore:
+            location: classpath:keystore.jks
+            password: "${keystore.password}"
+            type: JKS
+          key:
+            password: "${keystore.keyPassword}"
+          truststore:
+            location: classpath:trust-store
+            password: "${truststore.password}"
+            type: JKS
+box:
+  id: TODO  # TODO: supply the Box client id
+  secret: TODO  # TODO: supply the Box client secret
+  authorization-url: https://www.box.com/api/oauth2/authorize
+  local-authorization-url: https://localhost:8082/authorization
+  redirection-url: https://localhost:8082/redirectUrl
+  token-url: https://www.box.com/api/oauth2/token
+  custom-parameters:
+    - name: box_device_id
+      value: "1"
+    - name: box_device_name
+      value: device1
+  web:
+    login-location: https://localhost:8082/authorization?onCompleteRedirectTo=http://localhost:8081/web/loginDone
+  request:
+    protocol: HTTPS
+    host: api.box.com
+    port: 443
+    base-path: /2.0
+    response-timeout: 10000
+  search:
+    path: /search
+    query: mule
+keystore:
+  password: TODO  # TODO: supply the keystore password
+  keyPassword: TODO  # TODO: supply the key password of the keystore entry
+truststore:
+  password: TODO  # TODO: supply the trust-store password

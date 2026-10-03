@@ -23,6 +23,10 @@ tshirt:
   response-timeout: 10000  # milliseconds (D-131)
 
 spring:
+  # Excludes Spring Boot's Spring WS server auto-configuration: no MessageDispatcherServlet
+  # at /services/*; every path except /orders and /inventory answers the unmatched-path 404.
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.webservices.WebServicesAutoConfiguration
   mvc:
     throw-exception-if-no-handler-found: true
   web:

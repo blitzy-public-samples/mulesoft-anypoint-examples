@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: oauth2-client-credentials-using-the-HTTP-connector-java
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+  ssl:
+    bundle:
+      jks:
+        tls-context:
+          keystore:
+            location: classpath:${keystore.path}
+            password: ${keystore.password}
+            type: JKS
+          key:
+            password: ${keystore.key.password}
+          truststore:
+            location: classpath:${truststore.path}
+            password: ${truststore.password}
+            type: JKS
+
+server:
+  address: ${listener.http-listener-configuration.host}
+  port: ${listener.http-listener-configuration.port}
+
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+    port: 8081
+
+oauth:
+  client:
+    id: TODO  # TODO: supply the Box application client_id (D-012)
+    secret: TODO  # TODO: supply the Box application client_secret (D-012)
+
+client:
+  id: TODO  # TODO: supply the client_id value sent to the IBM FIM host (D-012)
+
+keystore:
+  path: keystore.jks
+  password: TODO  # TODO: supply the keystore.jks store password (D-012)
+  key:
+    password: TODO  # TODO: supply the keystore.jks key-entry password (D-012)
+
+truststore:
+  path: trust-store
+  password: TODO  # TODO: supply the trust-store store password (D-012)
+
+box:
+  base-url: https://app.box.com:443/api/oauth2/authorize
+  token-url: https://app.box.com/api/oauth2/token
+  response-timeout: 10000
+
+fim:
+  base-url: https://tfim01.demos.ibm.com:443
+  response-timeout: 10000

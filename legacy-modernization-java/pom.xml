@@ -74,7 +74,7 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- CSV output of ShippingOrderCsvMapper (DW-15) -->
+        <!-- commons-csv (D-063); ShippingOrderCsvMapper writes the DW-15 CSV with its own writer and does not use it -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-csv</artifactId>

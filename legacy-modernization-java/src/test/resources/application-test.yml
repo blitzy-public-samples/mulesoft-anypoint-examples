@@ -1,0 +1,4 @@
+# Directory the shipping-order CSV files are written to during tests (D-315)
+file:
+  legacy-fulfillment:
+    path: target/test-output/Output
