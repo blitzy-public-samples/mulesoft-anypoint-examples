@@ -1,0 +1,99 @@
+[
+  {
+    "links": [
+      {
+        "rel": "self",
+        "href": "https://tstdrv0000000.suitetalk.api.netsuite.com/services/rest/record/v1/opportunity/1271"
+      }
+    ],
+    "tranid": "OPP00000044",
+    "estgrossprofitpercent": 100.0,
+    "salesrep": {
+      "links": [],
+      "id": "23",
+      "refName": "Clark Koozer"
+    },
+    "projectedtotal": 3875.85,
+    "title": "Short wave",
+    "expectedclosedate": "2014-12-05",
+    "id": "1271",
+    "currencyname": "USA",
+    "exchangerate": 1.0,
+    "weightedtotal": 1937.93,
+    "currency": {
+      "links": [],
+      "id": "1",
+      "refName": "USA"
+    },
+    "totalcostestimate": 0.0,
+    "lastmodifieddate": "2015-01-01T20:13:44Z",
+    "leadsource": {
+      "links": [],
+      "id": "100003",
+      "refName": "Electronics Retail Trade Show"
+    },
+    "probability": 50.0,
+    "daysopen": 349,
+    "forecasttype": {
+      "links": [],
+      "id": "0",
+      "refName": "Omitted"
+    },
+    "subsidiary": {
+      "links": [],
+      "id": "1",
+      "refName": "Honeycomb Mfg."
+    },
+    "createddate": "2015-05-03T17:55:10Z",
+    "entitystatus": {
+      "links": [],
+      "id": "10",
+      "refName": "Proposal"
+    },
+    "estgrossprofit": 3875.85,
+    "shippingaddress": {
+      "links": [],
+      "id": "2475",
+      "addressee": "Williams Electronics and Communications",
+      "addr1": "123 Main St.",
+      "addr2": "Suite 700",
+      "city": "San Mate",
+      "state": "CA",
+      "zip": "94002",
+      "country": "US",
+      "override": false,
+      "addrtext": "Williams Electronics and Communications\n123 Main St.\nSuite 700\nSan Mate CA 94002\nUnited States"
+    },
+    "trandate": "2015-04-03",
+    "location": {
+      "links": [],
+      "id": "2",
+      "refName": "01: San Francisco"
+    },
+    "billingaddress": {
+      "links": [],
+      "addressee": "Williams Electronics and Communications",
+      "addr1": "123 Main St.",
+      "addr2": "Suite 700",
+      "city": "San Mate",
+      "dropdownstate": {
+        "id": "CA",
+        "refName": "California"
+      },
+      "zip": "94002",
+      "country": "US",
+      "addrtext": "Williams Electronics and Communications\n123 Main St.\nSuite 700\nSan Mate CA 94002\nUnited States"
+    },
+    "shipisresidential": false,
+    "isbudgetapproved": false,
+    "entity": {
+      "links": [],
+      "id": "1066",
+      "refName": "Williams Electronics and Communications"
+    },
+    "status": {
+      "id": "issuedQuote",
+      "refName": "Issued Quote"
+    }
+  }
+]

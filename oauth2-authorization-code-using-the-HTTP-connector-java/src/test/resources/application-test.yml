@@ -1,0 +1,9 @@
+# In-JVM test values only (D-012).
+box:
+  id: test-client-id
+  secret: test-client-secret
+keystore:
+  password: mule123
+  keyPassword: mule123
+truststore:
+  password: mule123

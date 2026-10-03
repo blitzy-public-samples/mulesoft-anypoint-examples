@@ -1,0 +1,16 @@
+# Copy to application-local.yml in this folder, set each value, and run with --spring.profiles.active=local (D-012).
+oauth:
+  client:
+    id: TODO  # TODO: supply the Box application client_id (D-012)
+    secret: TODO  # TODO: supply the Box application client_secret (D-012)
+
+client:
+  id: TODO  # TODO: supply the client_id value sent to the IBM FIM host (D-012)
+
+keystore:
+  password: TODO  # TODO: supply the keystore.jks store password (D-012)
+  key:
+    password: TODO  # TODO: supply the keystore.jks key-entry password (D-012)
+
+truststore:
+  password: TODO  # TODO: supply the trust-store store password (D-012)

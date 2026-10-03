@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Console</title>
+<!-- page layout: header row, resource list beside or above the details and Try It (D-493) -->
+<style>
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+  body {
+    --console-gap: 1rem;
+    --console-space: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--console-gap);
+    margin: var(--console-gap);
+  }
+  header {
+    display: flex;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--console-gap);
+  }
+  header > * {
+    margin: 0;
+  }
+  nav {
+    flex: 1 1 15rem;
+    min-inline-size: 0;
+  }
+  main {
+    display: flex;
+    flex: 3 1 30rem;
+    flex-direction: column;
+    gap: var(--console-gap);
+    min-inline-size: 0;
+  }
+  #try-it {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--console-space);
+  }
+  #try-it > pre {
+    align-self: stretch;
+  }
+  #details:empty, #try-it:empty {
+    display: none;
+  }
+  #skip-link {
+    position: absolute;
+    inset-block-start: -10rem;
+    inset-inline-start: var(--console-gap);
+    padding: var(--console-space);
+    background-color: Canvas;
+  }
+  #skip-link:focus-visible {
+    inset-block-start: var(--console-gap);
+  }
+  button, input, select, textarea {
+    font: inherit;
+  }
+  input, select, textarea {
+    max-inline-size: 100%;
+  }
+  pre {
+    margin: 0;
+    font-family: monospace;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+</style>
+</head>
+<body>
+  <!-- API console page (D-009); console.js renders it from api.json -->
+  <!-- skip link to the details and Try It of the selected method (D-493) -->
+  <a id="skip-link" href="#console-main">Skip to method details</a>
+  <header>
+    <!-- API title and version, written by console.js -->
+    <h1 id="api-title">API Console</h1>
+    <!-- served RAML contract -->
+    <a id="raml-link" href="netsuite-api.raml">RAML</a>
+  </header>
+  <nav aria-label="Resources">
+    <!-- resource list filled by console.js -->
+    <div id="resources"></div>
+  </nav>
+  <main id="console-main">
+    <!-- details panel of the selected method, filled by console.js -->
+    <div id="details"></div>
+    <!-- Try It section of the selected method, filled by console.js -->
+    <div id="try-it"></div>
+  </main>
+  <script src="console.js"></script>
+</body>
+</html>

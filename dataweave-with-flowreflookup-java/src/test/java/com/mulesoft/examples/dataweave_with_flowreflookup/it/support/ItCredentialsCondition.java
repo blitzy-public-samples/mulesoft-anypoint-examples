@@ -73,10 +73,9 @@ public final class ItCredentialsCondition implements ExecutionCondition {
      * class without the annotation is enabled. For an annotated class, {@code application-it.yml} is loaded
      * through the test class's own class loader, or through the thread context class loader when the test
      * class has none, read as UTF-8 and checked by {@link #evaluate(Reader, String[])} against the
-     * annotation's keys; that method also reports a failure while reading the resource. When closing the
-     * resource throws an {@link IOException}, the class is disabled with {@code "application-it.yml could
-     * not be read: <exception class>"}; the reason names the exception class only. No checked exception
-     * leaves this method.
+     * annotation's keys. When reading or closing the resource throws an {@link IOException}, the class is
+     * disabled with {@code "application-it.yml could not be read: <exception class>"}; the reason names the
+     * exception class only. No checked exception leaves this method.
      *
      * @param context the extension context of the test class or method being evaluated
      * @return enabled when the annotation is absent or every required key holds a usable value; disabled
@@ -115,7 +114,7 @@ public final class ItCredentialsCondition implements ExecutionCondition {
      *   <li>{@code yamlOrNull} is {@code null}: {@code "application-it.yml not found on the test
      *       classpath"};</li>
      *   <li>reading {@code yamlOrNull} to its end throws an {@link IOException}: {@code "application-it.yml
-     *       could not be parsed: <exception class>"}; the reason names the exception class only;</li>
+     *       could not be read: <exception class>"}; the reason names the exception class only;</li>
      *   <li>SnakeYAML throws while it composes the text into a node graph, as for a syntax error or a
      *       stream of more than one document: {@code "application-it.yml could not be parsed: <exception
      *       class>"}; the reason names the exception class only;</li>
@@ -155,7 +154,7 @@ public final class ItCredentialsCondition implements ExecutionCondition {
             yamlOrNull.transferTo(content);
         } catch (IOException e) {
             return ConditionEvaluationResult.disabled(
-                    RESOURCE + " could not be parsed: " + e.getClass().getName());
+                    RESOURCE + " could not be read: " + e.getClass().getName());
         }
         String text = content.toString();
         Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));

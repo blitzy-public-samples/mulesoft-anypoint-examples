@@ -12,13 +12,17 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
 import com.workday.bsvc.BusinessEntityStatusValueObjectIDType;
+import com.workday.bsvc.BusinessEntityStatusValueObjectType;
+import com.workday.bsvc.CustomerBusinessEntityWWSDataType;
 import com.workday.bsvc.CustomerCategoryObjectIDType;
+import com.workday.bsvc.CustomerCategoryObjectType;
 import com.workday.bsvc.CustomerStatusDataType;
 import com.workday.bsvc.CustomerWWSDataType;
 import com.workday.bsvc.ObjectFactory;
@@ -68,6 +72,9 @@ public class PutCustomerRequestMapperTest {
 
     /** Namespace of the generated Workday elements and of their qualified attributes. */
     private static final String BSVC = "urn:com.workday/bsvc";
+
+    /** JAXB context path of the types XJC generates from the pinned Revenue Management v35.0 WSDL. */
+    private static final String GENERATED_PACKAGE = "com.workday.bsvc";
 
     /** Absolute test-classpath location of the original suite's request fixture. */
     private static final String FIXTURE = "/original/customer.xml";
@@ -152,7 +159,7 @@ public class PutCustomerRequestMapperTest {
             + "<Customer_Status_Reference_Value>ACTIVE</Customer_Status_Reference_Value>"
             + "</Account></root>";
 
-    /** JAXB context of {@link PutCustomerRequestType}, created on first use. */
+    /** JAXB context of {@value #GENERATED_PACKAGE}, created on first use. */
     private static JAXBContext requestJaxbContext;
 
     /** The mapper under test. */
@@ -246,7 +253,8 @@ public class PutCustomerRequestMapperTest {
     /**
      * Asserts the fixture without its {@code localName} element gives the empty string for each request leaf
      * that element fills, and the fixture value for every other leaf, and that each leaf marshals exactly once
-     * with that value: an empty element for a value, an empty {@code bsvc:type} attribute for a {@code type}.
+     * with that value: an empty element for a value, an empty {@code bsvc:type} attribute for a {@code type}
+     * (D-323).
      *
      * @param localName the local name of the {@code Account} element removed from the fixture
      * @throws IOException when the fixture cannot be read
@@ -288,7 +296,8 @@ public class PutCustomerRequestMapperTest {
 
     /**
      * Asserts {@code <root/>}, a {@code root} without an {@code Account} child, maps without an exception to the
-     * empty string for every value and {@code type}, with every container created.
+     * empty string for every value and {@code type} read through the per-leaf helpers, with every container
+     * created (D-323).
      *
      * @throws IOException when the input cannot be read
      * @throws ParserConfigurationException when the JDK parser rejects a mandatory feature
@@ -487,62 +496,193 @@ public class PutCustomerRequestMapperTest {
     }
 
     /**
-     * Asserts every value and {@code type} of {@code request} is the empty string and every container exists,
-     * with exactly one category {@code ID}, one {@code Customer_Status_Data} and one status {@code ID} (D-323).
+     * Asserts every container of {@code request} exists and every value and {@code type} read through the per-leaf
+     * helpers is the empty string (D-323).
      *
      * @param request the mapped request
      */
     private static void assertEveryFieldEmpty(PutCustomerRequestType request) {
-        assertThat(request).isNotNull();
-        CustomerWWSDataType data = request.getCustomerData();
-        assertThat(data).isNotNull();
-        assertThat(data.getCustomerID()).isEqualTo("");
-        assertThat(data.getCustomerReferenceID()).isEqualTo("");
-        assertThat(data.getCustomerName()).isEqualTo("");
-        assertThat(data.getBusinessEntityData()).isNotNull();
-        assertThat(data.getBusinessEntityData().getBusinessEntityName()).isEqualTo("");
-        assertThat(data.getCustomerCategoryReference()).isNotNull();
-        assertThat(data.getCustomerCategoryReference().getID())
-                .extracting(CustomerCategoryObjectIDType::getType, CustomerCategoryObjectIDType::getValue)
-                .containsExactly(tuple("", ""));
-        assertThat(data.getCustomerStatusData()).hasSize(1);
-        assertThat(data.getCustomerStatusData().get(0).getCustomerStatusValueReference()).isNotNull();
-        assertThat(data.getCustomerStatusData().get(0).getCustomerStatusValueReference().getID())
-                .extracting(BusinessEntityStatusValueObjectIDType::getType,
-                        BusinessEntityStatusValueObjectIDType::getValue)
-                .containsExactly(tuple("", ""));
+        assertThat(leaves(request)).hasSize(8)
+                .allSatisfy((path, value) -> assertThat(value).as(path).isEqualTo(""));
     }
 
     /**
-     * Lists the eight leaf values of {@code request}, keyed by the XPath at which each marshals: the
-     * {@code Customer_ID}, {@code Customer_Reference_ID}, {@code Customer_Name} and {@code Business_Entity_Name}
-     * values, then the {@code type} and value of the category {@code ID} and of the status {@code ID}. Asserts the
-     * request holds exactly one category {@code ID}, one {@code Customer_Status_Data} and one status {@code ID}.
+     * Asserts {@code request} holds its {@code Customer_Data}, a {@code Business_Entity_Data}, a
+     * {@code Customer_Category_Reference} with exactly one {@code ID}, and exactly one {@code Customer_Status_Data}
+     * whose {@code Customer_Status_Value_Reference} holds exactly one {@code ID}.
+     *
+     * @param request the mapped request
+     */
+    private static void assertContainersCreated(PutCustomerRequestType request) {
+        assertThat(request).isNotNull();
+        CustomerWWSDataType data = request.getCustomerData();
+        assertThat(data).as("Customer_Data").isNotNull();
+        assertThat(data.getBusinessEntityData()).as("Business_Entity_Data").isNotNull();
+        assertThat(data.getCustomerCategoryReference()).as("Customer_Category_Reference").isNotNull();
+        assertThat(data.getCustomerCategoryReference().getID()).as("Customer_Category_Reference/ID").hasSize(1);
+        assertThat(data.getCustomerStatusData()).as("Customer_Status_Data").hasSize(1);
+        BusinessEntityStatusValueObjectType status = data.getCustomerStatusData().get(0)
+                .getCustomerStatusValueReference();
+        assertThat(status).as("Customer_Status_Value_Reference").isNotNull();
+        assertThat(status.getID()).as("Customer_Status_Value_Reference/ID").hasSize(1);
+    }
+
+    /**
+     * Lists the eight leaf values of {@code request}, read through the per-leaf helpers and keyed by the XPath at
+     * which each marshals: the {@code Customer_ID}, {@code Customer_Reference_ID}, {@code Customer_Name} and
+     * {@code Business_Entity_Name} values, then the {@code type} and value of the category {@code ID} and of the
+     * status {@code ID}. Asserts first that every container exists, through {@link #assertContainersCreated}.
      *
      * @param request the mapped request
      * @return the leaf values in that order, {@code null} where the request holds {@code null}
      */
     private static Map<String, String> leaves(PutCustomerRequestType request) {
-        assertThat(request).isNotNull();
-        CustomerWWSDataType data = request.getCustomerData();
-        assertThat(data).isNotNull();
-        List<CustomerCategoryObjectIDType> categoryIds = data.getCustomerCategoryReference().getID();
-        assertThat(categoryIds).hasSize(1);
-        assertThat(data.getCustomerStatusData()).hasSize(1);
-        List<BusinessEntityStatusValueObjectIDType> statusIds =
-                data.getCustomerStatusData().get(0).getCustomerStatusValueReference().getID();
-        assertThat(statusIds).hasSize(1);
+        assertContainersCreated(request);
 
         Map<String, String> leaves = new LinkedHashMap<>();
-        leaves.put(CUSTOMER_ID, data.getCustomerID());
-        leaves.put(CUSTOMER_REFERENCE_ID, data.getCustomerReferenceID());
-        leaves.put(CUSTOMER_NAME, data.getCustomerName());
-        leaves.put(BUSINESS_ENTITY_NAME, data.getBusinessEntityData().getBusinessEntityName());
-        leaves.put(CATEGORY_ID_TYPE, categoryIds.get(0).getType());
-        leaves.put(CATEGORY_ID, categoryIds.get(0).getValue());
-        leaves.put(STATUS_ID_TYPE, statusIds.get(0).getType());
-        leaves.put(STATUS_ID, statusIds.get(0).getValue());
+        leaves.put(CUSTOMER_ID, customerId(request));
+        leaves.put(CUSTOMER_REFERENCE_ID, customerReferenceId(request));
+        leaves.put(CUSTOMER_NAME, customerName(request));
+        leaves.put(BUSINESS_ENTITY_NAME, businessEntityName(request));
+        leaves.put(CATEGORY_ID_TYPE, categoryIdType(request));
+        leaves.put(CATEGORY_ID, categoryIdValue(request));
+        leaves.put(STATUS_ID_TYPE, statusIdType(request));
+        leaves.put(STATUS_ID, statusIdValue(request));
         return leaves;
+    }
+
+    /**
+     * Returns the {@code Customer_Data} of {@code request}.
+     *
+     * @param request the mapped request, or {@code null}
+     * @return the {@code Customer_Data}, empty when {@code request} or its {@code Customer_Data} is {@code null}
+     */
+    private static Optional<CustomerWWSDataType> customerData(PutCustomerRequestType request) {
+        return Optional.ofNullable(request).map(PutCustomerRequestType::getCustomerData);
+    }
+
+    /**
+     * Returns the {@code Customer_Data/Customer_ID} value of {@code request}.
+     *
+     * @param request the mapped request, or {@code null}
+     * @return the value, {@code null} when it or any parent object is {@code null}
+     */
+    private static String customerId(PutCustomerRequestType request) {
+        return customerData(request).map(CustomerWWSDataType::getCustomerID).orElse(null);
+    }
+
+    /**
+     * Returns the {@code Customer_Data/Customer_Reference_ID} value of {@code request}.
+     *
+     * @param request the mapped request, or {@code null}
+     * @return the value, {@code null} when it or any parent object is {@code null}
+     */
+    private static String customerReferenceId(PutCustomerRequestType request) {
+        return customerData(request).map(CustomerWWSDataType::getCustomerReferenceID).orElse(null);
+    }
+
+    /**
+     * Returns the {@code Customer_Data/Customer_Name} value of {@code request}.
+     *
+     * @param request the mapped request, or {@code null}
+     * @return the value, {@code null} when it or any parent object is {@code null}
+     */
+    private static String customerName(PutCustomerRequestType request) {
+        return customerData(request).map(CustomerWWSDataType::getCustomerName).orElse(null);
+    }
+
+    /**
+     * Returns the {@code Customer_Data/Business_Entity_Data/Business_Entity_Name} value of {@code request}.
+     *
+     * @param request the mapped request, or {@code null}
+     * @return the value, {@code null} when it or any parent object is {@code null}
+     */
+    private static String businessEntityName(PutCustomerRequestType request) {
+        return customerData(request)
+                .map(CustomerWWSDataType::getBusinessEntityData)
+                .map(CustomerBusinessEntityWWSDataType::getBusinessEntityName)
+                .orElse(null);
+    }
+
+    /**
+     * Returns the first {@code Customer_Data/Customer_Category_Reference/ID} of {@code request}.
+     *
+     * @param request the mapped request, or {@code null}
+     * @return the {@code ID}, empty when any parent object is {@code null} or the {@code ID} list is empty
+     */
+    private static Optional<CustomerCategoryObjectIDType> categoryId(PutCustomerRequestType request) {
+        return customerData(request)
+                .map(CustomerWWSDataType::getCustomerCategoryReference)
+                .map(CustomerCategoryObjectType::getID)
+                .flatMap(PutCustomerRequestMapperTest::first);
+    }
+
+    /**
+     * Returns the {@code type} attribute of the category {@code ID} of {@code request}.
+     *
+     * @param request the mapped request, or {@code null}
+     * @return the {@code type}, {@code null} when it or any parent object is {@code null} or a list is empty
+     */
+    private static String categoryIdType(PutCustomerRequestType request) {
+        return categoryId(request).map(CustomerCategoryObjectIDType::getType).orElse(null);
+    }
+
+    /**
+     * Returns the value of the category {@code ID} of {@code request}.
+     *
+     * @param request the mapped request, or {@code null}
+     * @return the value, {@code null} when it or any parent object is {@code null} or a list is empty
+     */
+    private static String categoryIdValue(PutCustomerRequestType request) {
+        return categoryId(request).map(CustomerCategoryObjectIDType::getValue).orElse(null);
+    }
+
+    /**
+     * Returns the first {@code Customer_Status_Value_Reference/ID} of the first {@code Customer_Status_Data} of
+     * {@code request}.
+     *
+     * @param request the mapped request, or {@code null}
+     * @return the {@code ID}, empty when any parent object is {@code null} or a list on the way is empty
+     */
+    private static Optional<BusinessEntityStatusValueObjectIDType> statusId(PutCustomerRequestType request) {
+        return customerData(request)
+                .map(CustomerWWSDataType::getCustomerStatusData)
+                .flatMap(PutCustomerRequestMapperTest::first)
+                .map(CustomerStatusDataType::getCustomerStatusValueReference)
+                .map(BusinessEntityStatusValueObjectType::getID)
+                .flatMap(PutCustomerRequestMapperTest::first);
+    }
+
+    /**
+     * Returns the {@code type} attribute of the status {@code ID} of {@code request}.
+     *
+     * @param request the mapped request, or {@code null}
+     * @return the {@code type}, {@code null} when it or any parent object is {@code null} or a list is empty
+     */
+    private static String statusIdType(PutCustomerRequestType request) {
+        return statusId(request).map(BusinessEntityStatusValueObjectIDType::getType).orElse(null);
+    }
+
+    /**
+     * Returns the value of the status {@code ID} of {@code request}.
+     *
+     * @param request the mapped request, or {@code null}
+     * @return the value, {@code null} when it or any parent object is {@code null} or a list is empty
+     */
+    private static String statusIdValue(PutCustomerRequestType request) {
+        return statusId(request).map(BusinessEntityStatusValueObjectIDType::getValue).orElse(null);
+    }
+
+    /**
+     * Returns the first element of {@code list}.
+     *
+     * @param list a generated list property, or {@code null}
+     * @param <T> the element type
+     * @return the first element, empty when {@code list} is {@code null} or empty or its first element is
+     *         {@code null}
+     */
+    private static <T> Optional<T> first(List<T> list) {
+        return list == null || list.isEmpty() ? Optional.empty() : Optional.ofNullable(list.get(0));
     }
 
     /**
@@ -644,14 +784,14 @@ public class PutCustomerRequestMapperTest {
     }
 
     /**
-     * Returns the JAXB context of {@link PutCustomerRequestType}, creating it on the first call.
+     * Returns the JAXB context of the generated package {@value #GENERATED_PACKAGE}, creating it on the first call.
      *
      * @return the shared context
      * @throws JAXBException when the context cannot be created
      */
     private static synchronized JAXBContext requestJaxbContext() throws JAXBException {
         if (requestJaxbContext == null) {
-            requestJaxbContext = JAXBContext.newInstance(PutCustomerRequestType.class);
+            requestJaxbContext = JAXBContext.newInstance(GENERATED_PACKAGE);
         }
         return requestJaxbContext;
     }

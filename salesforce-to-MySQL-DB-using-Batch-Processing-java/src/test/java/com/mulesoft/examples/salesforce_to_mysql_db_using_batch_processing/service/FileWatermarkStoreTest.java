@@ -30,7 +30,8 @@ import org.junit.jupiter.api.io.TempDir;
  * and the first reads what the second wrote; two writes leave no temporary file; surrounding whitespace is
  * stripped and blank content reads as empty; content that is not valid UTF-8, a store directory that cannot
  * be created and a move that fails are each thrown as {@link UncheckedIOException} naming the key file,
- * and the failed move leaves no temporary file; the constructor rejects a missing, blank, {@code TODO} or
+ * and the failed move leaves no temporary file; a write whose temporary file cannot be created leaves the
+ * earlier stored value in place; the constructor rejects a missing, blank, {@code TODO} or
  * invalid {@code watermark.store-dir} with an {@link IllegalArgumentException}. Together they cover every
  * line of the store except the non-atomic fallback move after {@code AtomicMoveNotSupportedException} and
  * the suppressed failure to delete the temporary file (D-049).
@@ -55,8 +56,7 @@ public class FileWatermarkStoreTest {
 
     /**
      * Points {@code storeDir} at {@code <tempDir>/data/watermark}, which does not exist yet, and creates a
-     * store over it. Package-private lifecycle method: the public members of this class are its test
-     * methods only.
+     * store over it.
      */
     @BeforeEach
     void setUp() {
@@ -211,6 +211,34 @@ public class FileWatermarkStoreTest {
         }
         assertThat(keyPath).isDirectory();
         assertThat(store.read(KEY)).isEmpty();
+    }
+
+    /**
+     * A write that fails after a value is stored leaves that value in place. The 251-character key names a
+     * key file within the 255-byte file-name limit, while its temporary file {@code <key>-<n>.tmp} exceeds
+     * the limit and cannot be created: write throws an unchecked exception naming the key file, the key
+     * file still holds the earlier value, read returns it, and no temporary file remains (D-036, D-300).
+     */
+    @Test
+    @DisplayName("a write that fails leaves the earlier stored value in place")
+    public void failedWriteLeavesEarlierValueInPlace() throws IOException {
+        String longKey = "t".repeat(251);
+        Path keyFile = storeDir.resolve(longKey);
+        Files.createDirectories(storeDir);
+        Files.writeString(keyFile, VALUE, UTF_8);
+        assertThat(store.read(longKey)).isEqualTo(Optional.of(VALUE));
+
+        assertThatThrownBy(() -> store.write(longKey, NEWER_VALUE))
+                .isInstanceOf(UncheckedIOException.class)
+                .hasMessage("Cannot write watermark " + keyFile)
+                .hasCauseInstanceOf(IOException.class)
+                .satisfies(thrown -> assertThat(thrown.getCause().getSuppressed()).isEmpty());
+
+        assertThat(Files.readString(keyFile, UTF_8)).isEqualTo(VALUE);
+        assertThat(store.read(longKey)).isEqualTo(Optional.of(VALUE));
+        try (Stream<Path> entries = Files.list(storeDir)) {
+            assertThat(entries).containsExactly(keyFile);
+        }
     }
 
     /** A missing, blank or {@code TODO} store directory is rejected with a message naming the property. */

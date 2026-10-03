@@ -4,4 +4,4 @@ sfdc:
   securityToken: TODO  # TODO: supply the Salesforce security token
   key: TODO  # TODO: supply the connected app consumer key
   secret: TODO  # TODO: supply the connected app consumer secret
-  login-url: https://login.salesforce.com  # TODO: use https://test.salesforce.com for a sandbox org
+  login-url: TODO  # TODO: supply https://login.salesforce.com, or https://test.salesforce.com for a sandbox org

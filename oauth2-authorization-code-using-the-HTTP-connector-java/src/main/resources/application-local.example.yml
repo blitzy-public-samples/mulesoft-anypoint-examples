@@ -1,0 +1,8 @@
+box:
+  id: TODO  # TODO: supply the Box client id
+  secret: TODO  # TODO: supply the Box client secret
+keystore:
+  password: TODO  # TODO: supply the keystore password
+  keyPassword: TODO  # TODO: supply the key password of the keystore entry
+truststore:
+  password: TODO  # TODO: supply the trust-store password

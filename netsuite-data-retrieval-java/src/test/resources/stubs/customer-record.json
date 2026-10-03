@@ -1,0 +1,108 @@
+[
+  {
+    "links": [
+      {
+        "rel": "self",
+        "href": "https://tstdrv0000000.suitetalk.api.netsuite.com/services/rest/record/v1/customer/-5"
+      }
+    ],
+    "lastname": "Wolfe",
+    "isinactive": false,
+    "companyname": "Ramsey Inc. Wholesale Distribution V2011.1",
+    "receivablesaccount": {
+      "links": [],
+      "id": "-10",
+      "refName": "Use System Preference"
+    },
+    "consolbalance": -32.3,
+    "isperson": true,
+    "lastpagevisited": "Shopping Cart",
+    "consolaging2": 0.0,
+    "consolaging3": 0.0,
+    "id": "-5",
+    "visits": 31,
+    "billpay": false,
+    "consolaging4": -32.3,
+    "datecreated": "2013-07-22T07:00:00Z",
+    "aging2": 0.0,
+    "consoldepositbalance": 0.0,
+    "aging3": 0.0,
+    "accessrole": {
+      "links": [],
+      "id": "14",
+      "refName": "Customer Center"
+    },
+    "altemail": "awolfe@huffmanmfg.com",
+    "consolaging1": 0.0,
+    "aging1": 0.0,
+    "unbilledorders": 49.98,
+    "consolunbilledorders": 49.98,
+    "currency": {
+      "links": [],
+      "id": "1",
+      "refName": "USA"
+    },
+    "aging4": -32.3,
+    "consoloverduebalance": 0.0,
+    "firstvisit": "2015-01-02T16:03:20Z",
+    "email": "suchi.deshpande@mulesoft.com",
+    "giveaccess": true,
+    "custentity_fmt_customer_credit_on_hold": false,
+    "custentity8": {
+      "links": [],
+      "id": "3",
+      "refName": "Less than $5 million"
+    },
+    "custentity_cust_priority": 50,
+    "custentity7": {
+      "links": [],
+      "id": "1",
+      "refName": "1 - 99 Employees"
+    },
+    "custentity_fmt_cur_sales_order": {
+      "links": [],
+      "id": "2570",
+      "refName": "Sales Order #SLS00000452"
+    },
+    "custentity_fmt_cust_credit_on_hold": false,
+    "custentity6": {
+      "links": [],
+      "id": "4",
+      "refName": "Computers, Peripherals, and Software"
+    },
+    "custentity_2663_direct_debit": false,
+    "custentity18": false,
+    "custentity_2663_customer_refund": false,
+    "taxable": false,
+    "lastmodifieddate": "2015-01-23T04:10:20Z",
+    "lastvisit": "2016-02-24T19:41:36Z",
+    "externalId": "entity-5",
+    "entityid": "Alex Wolfe",
+    "subsidiary": {
+      "links": [],
+      "id": "1",
+      "refName": "Honeycomb Mfg."
+    },
+    "clickstream": "HOME",
+    "shipcomplete": false,
+    "firstname": "Alex",
+    "stage": {
+      "id": "CUSTOMER",
+      "refName": "Customer"
+    },
+    "creditholdoverride": {
+      "id": "AUTO",
+      "refName": "Auto"
+    },
+    "phone": "650-555-9788",
+    "consolaging": 0.0,
+    "entitystatus": {
+      "links": [],
+      "id": "13",
+      "refName": "CUSTOMER-Closed Won"
+    },
+    "aging": 0.0,
+    "startdate": "2015-04-19",
+    "defaultaddress": "US"
+  }
+]

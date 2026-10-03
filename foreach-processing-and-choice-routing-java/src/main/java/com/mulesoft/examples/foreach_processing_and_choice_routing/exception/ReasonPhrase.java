@@ -18,7 +18,8 @@ import io.undertow.servlet.handlers.ServletRequestContext;
  *
  * <p>The status line then reads {@code HTTP/1.1 400 Invalid input data}.
  *
- * <p>The class holds no state and is not instantiable. This project's copy has no caller (D-004).
+ * <p>The class holds no state and is not instantiable. This project's copy (D-004) writes the phrase of the
+ * no-listener answer of {@code config.PortPathGuardFilter} (D-011).
  */
 public final class ReasonPhrase {
 
