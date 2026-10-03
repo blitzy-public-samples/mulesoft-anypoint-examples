@@ -1,0 +1,3 @@
+file:
+  outbound-endpoint:
+    path: target/test-output  # Directory the uploaded file is written to in tests (D-387)

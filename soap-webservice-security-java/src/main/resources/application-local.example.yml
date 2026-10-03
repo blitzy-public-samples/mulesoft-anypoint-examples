@@ -1,0 +1,12 @@
+# Copy to application-local.yml and run with --spring.profiles.active=local (D-012)
+keystore:
+  password: TODO  # TODO: supply the value of org.apache.ws.security.crypto.merlin.keystore.password at soap-webservice-security/src/main/resources/wssecurity.properties:3
+wssecurity:
+  users:
+    joe: TODO  # TODO: supply the password set for "joe" at soap-webservice-security/src/main/java/com/mulesoft/mule/example/security/PasswordCallback.java:25-28
+    stan: TODO  # TODO: supply the password set for "stan" at soap-webservice-security/src/main/java/com/mulesoft/mule/example/security/PasswordCallback.java:29-32
+  wrong-password: TODO  # TODO: supply the password set for "joe" at soap-webservice-security/src/main/java/com/mulesoft/mule/example/security/WrongPasswordCallback.java:28-31
+saml:
+  issuer:
+    key:
+      password: TODO  # TODO: supply the value of org.apache.ws.security.saml.issuer.key.password at soap-webservice-security/src/main/resources/saml.properties:5
