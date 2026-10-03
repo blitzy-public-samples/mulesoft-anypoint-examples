@@ -17,6 +17,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.function.Supplier;
 
@@ -178,7 +179,9 @@ class CustomerPageRendererTest {
 
     /**
      * Asserts the rows text after its declaration line replaces the whole expression and every other template byte
-     * is unchanged: the page is 844 bytes, the template length less the expression plus the inserted text (SC-09,
+     * is unchanged: the page starts with the template bytes before the expression, ends with the template bytes
+     * after it, and holds between them {@link #ROWS_TEXT} without the declaration line and without a trailing
+     * newline. The page is 844 bytes, the template length less the expression plus the inserted text (SC-09,
      * D-056).
      */
     @Test
@@ -187,6 +190,14 @@ class CustomerPageRendererTest {
         String page = renderer.render(DECLARATION + "\n" + ROWS_TEXT);
 
         byte[] actual = page.getBytes(UTF_8);
+        byte[] prefixBytes = prefix().getBytes(UTF_8);
+        byte[] suffixBytes = suffix().getBytes(UTF_8);
+        assertTrue(actual.length >= prefixBytes.length + suffixBytes.length,
+                "page is shorter than the template text around the expression");
+        assertArrayEquals(prefixBytes, Arrays.copyOfRange(actual, 0, prefixBytes.length));
+        assertArrayEquals(suffixBytes, Arrays.copyOfRange(actual, actual.length - suffixBytes.length, actual.length));
+        assertEquals(ROWS_TEXT,
+                new String(actual, prefixBytes.length, actual.length - prefixBytes.length - suffixBytes.length, UTF_8));
         assertArrayEquals((prefix() + ROWS_TEXT + suffix()).getBytes(UTF_8), actual);
         assertEquals(ROWS_PAGE_LENGTH, actual.length);
         assertEquals(TEMPLATE_LENGTH - TOKEN.getBytes(UTF_8).length + ROWS_TEXT.getBytes(UTF_8).length,

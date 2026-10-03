@@ -1,0 +1,6 @@
+request:
+  http-request-configuration:
+    host: localhost
+spring:
+  main:
+    banner-mode: "off"

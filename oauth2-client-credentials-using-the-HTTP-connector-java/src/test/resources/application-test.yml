@@ -1,0 +1,6 @@
+oauth:
+  client:
+    id: test-client
+    secret: test-secret
+client:
+  id: test-client-id
