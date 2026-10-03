@@ -19,9 +19,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * these values (D-063).
  *
  * <p>The record declares no defaults: every value comes from the bound keys, a missing {@code String}
- * key binds {@code null} and a missing number key binds {@code 0}. Instances are immutable and every
- * method is safe to call from any thread. The generated {@code toString()} prints every component,
- * {@code password} included (D-287).
+ * key binds {@code null} and a missing number key binds {@code 0}. The constructor rejects a
+ * {@code null}, blank or {@code TODO} {@code imap.host}, {@code imap.user} or {@code imap.password}, an
+ * {@code imap.port} outside {@code 1} to {@code 65535}, an {@code imap.check-frequency} or
+ * {@code imap.response-timeout} of {@code 0} or less, and an {@code imap.user} holding a malformed
+ * percent-escape, with one {@link IllegalArgumentException} that names each offending key; a missing
+ * {@code imap.*} key and the committed placeholder values therefore stop application start (D-365).
+ * Instances are immutable and every method is safe to call from any thread. The generated
+ * {@code toString()} prints every component, {@code password} included (D-287).
  *
  * <pre>{@code
  * Session session = Session.getInstance(props.sessionProperties());
@@ -65,12 +70,83 @@ public record MailStoreProperties(String host, int port, String user, String pas
     /** Percent-escape of a literal {@code +}, substituted before decoding. */
     private static final String ENCODED_PLUS = "%2B";
 
+    /** Placeholder value of the committed {@code application.yml}, matched in any case once trimmed. */
+    private static final String PLACEHOLDER = "TODO";
+
     /**
-     * Returns the user with percent-escapes decoded; a literal {@code +} is kept; {@code null} when
-     * unset (D-285).
+     * Checks the bound {@code imap.*} values and stores them unchanged (D-365).
+     *
+     * <p>These values are violations:
+     * <ul>
+     *   <li>{@code imap.host}, {@code imap.user} or {@code imap.password} that is {@code null}, blank, or
+     *       {@code TODO} in any letter case once trimmed;</li>
+     *   <li>{@code imap.port} outside {@code 1} to {@code 65535};</li>
+     *   <li>{@code imap.check-frequency} or {@code imap.response-timeout} of {@code 0} or less;</li>
+     *   <li>{@code imap.user} holding a malformed percent-escape, a {@code %} not followed by two
+     *       hexadecimal digits, detected with the decoding of {@link #decodedUser()}.</li>
+     * </ul>
+     * Nothing is trimmed or decoded into the components, and no mailbox connection is opened.
+     *
+     * <pre>{@code
+     * new MailStoreProperties("TODO", 0, "bad%zz", "", 100, 10000)
+     *   ->  IllegalArgumentException: Invalid imap.* configuration: imap.host must be set to the IMAPS
+     *       server host name, not empty or the TODO placeholder; imap.port must be between 1 and 65535,
+     *       was 0; imap.user holds a malformed percent-escape: a % must be followed by two hexadecimal
+     *       digits; imap.password must be set to the IMAPS mailbox password, not empty or the TODO
+     *       placeholder
+     * }</pre>
+     *
+     * @param host            {@code imap.host}: the IMAPS server host name
+     * @param port            {@code imap.port}: the IMAPS server port
+     * @param user            {@code imap.user}: the mailbox user, plain or percent-encoded
+     * @param password        {@code imap.password}: the mailbox password
+     * @param checkFrequency  {@code imap.check-frequency}: the delay between two polls in milliseconds
+     * @param responseTimeout {@code imap.response-timeout}: the IMAPS connect and read timeout in
+     *                        milliseconds
+     * @throws IllegalArgumentException when any value is a violation; the message starts with
+     *                                  {@code Invalid imap.* configuration: } and lists every violation,
+     *                                  separated by {@code ; }, each naming its key and, for a number
+     *                                  key, the bound value; the {@code imap.user} and
+     *                                  {@code imap.password} values are never part of the message
+     */
+    public MailStoreProperties {
+        StringBuilder violations = new StringBuilder();
+        if (isUnset(host)) {
+            addViolation(violations,
+                    "imap.host must be set to the IMAPS server host name, not empty or the TODO placeholder");
+        }
+        if (port < 1 || port > 65535) {
+            addViolation(violations, "imap.port must be between 1 and 65535, was " + port);
+        }
+        if (isUnset(user)) {
+            addViolation(violations,
+                    "imap.user must be set to the IMAPS mailbox user, not empty or the TODO placeholder");
+        } else if (!isDecodable(user)) {
+            addViolation(violations, "imap.user holds a malformed percent-escape:"
+                    + " a % must be followed by two hexadecimal digits");
+        }
+        if (isUnset(password)) {
+            addViolation(violations, "imap.password must be set to the IMAPS mailbox password,"
+                    + " not empty or the TODO placeholder");
+        }
+        if (checkFrequency <= 0) {
+            addViolation(violations, "imap.check-frequency must be greater than 0 ms, was " + checkFrequency);
+        }
+        if (responseTimeout <= 0) {
+            addViolation(violations,
+                    "imap.response-timeout must be greater than 0 ms, was " + responseTimeout);
+        }
+        if (violations.length() > 0) {
+            throw new IllegalArgumentException("Invalid imap.* configuration: " + violations);
+        }
+    }
+
+    /**
+     * Returns the user with percent-escapes decoded; a literal {@code +} is kept (D-285).
      *
      * <p>Each {@code %XX} sequence is decoded as UTF-8. No other change is made: the value is neither
-     * trimmed nor lower-cased.
+     * trimmed nor lower-cased. The constructor admits only a set user whose percent-escapes are well
+     * formed, so the method never returns {@code null} and never throws (D-365).
      *
      * <pre>{@code
      * receiver%40example.com  ->  receiver@example.com
@@ -78,9 +154,7 @@ public record MailStoreProperties(String host, int port, String user, String pas
      * a+b@x.com               ->  a+b@x.com
      * }</pre>
      *
-     * @return the decoded user, or {@code null} when {@code imap.user} is unset
-     * @throws IllegalArgumentException when {@code user} holds a malformed percent-escape, such as a
-     *                                  {@code %} not followed by two hexadecimal digits
+     * @return the decoded user, never {@code null}
      */
     public String decodedUser() {
         if (user == null) {
@@ -98,7 +172,7 @@ public record MailStoreProperties(String host, int port, String user, String pas
      * entries, each replacing a copied entry of the same key:
      * <ul>
      *   <li>{@code mail.store.protocol} = {@code imaps};</li>
-     *   <li>{@code mail.imaps.host} = {@link #host()}, left unset when {@code host} is {@code null};</li>
+     *   <li>{@code mail.imaps.host} = {@link #host()}, which is never {@code null} (D-365);</li>
      *   <li>{@code mail.imaps.port} = {@link #port()};</li>
      *   <li>{@code mail.imaps.connectiontimeout} = {@link #responseTimeout()};</li>
      *   <li>{@code mail.imaps.timeout} = {@link #responseTimeout()}.</li>
@@ -119,5 +193,45 @@ public record MailStoreProperties(String host, int port, String user, String pas
         properties.setProperty(CONNECTION_TIMEOUT_KEY, timeout);
         properties.setProperty(READ_TIMEOUT_KEY, timeout);
         return properties;
+    }
+
+    /**
+     * Tells whether a text value is unset: {@code null}, blank, or {@code TODO} in any letter case once
+     * trimmed.
+     *
+     * @param value the bound value
+     * @return {@code true} when the value is unset
+     */
+    private static boolean isUnset(String value) {
+        return value == null || value.isBlank() || value.trim().equalsIgnoreCase(PLACEHOLDER);
+    }
+
+    /**
+     * Tells whether a user decodes as {@link #decodedUser()} decodes it, without an
+     * {@link IllegalArgumentException}.
+     *
+     * @param user the bound user, not {@code null}
+     * @return {@code true} when every {@code %} of the user starts a well-formed percent-escape
+     */
+    private static boolean isDecodable(String user) {
+        try {
+            URLDecoder.decode(user.replace("+", ENCODED_PLUS), StandardCharsets.UTF_8);
+            return true;
+        } catch (IllegalArgumentException malformed) {
+            return false;
+        }
+    }
+
+    /**
+     * Appends one violation to the list, after a {@code ; } separator when the list is not empty.
+     *
+     * @param violations the violations found so far
+     * @param violation  the violation text, naming its key
+     */
+    private static void addViolation(StringBuilder violations, String violation) {
+        if (violations.length() > 0) {
+            violations.append("; ");
+        }
+        violations.append(violation);
     }
 }

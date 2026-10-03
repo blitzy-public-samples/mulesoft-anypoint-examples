@@ -1,0 +1,5 @@
+wday:
+  hostname: localhost
+  tenant: test_tenant
+  user: test-user
+  password: test-password

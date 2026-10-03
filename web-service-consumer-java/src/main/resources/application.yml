@@ -24,7 +24,7 @@ tshirt:
 
 spring:
   # Excludes Spring Boot's Spring WS server auto-configuration: no MessageDispatcherServlet
-  # at /services/*; every path except /orders and /inventory answers the unmatched-path 404.
+  # at /services/*; every path except /orders and /inventory answers the unmatched-path 404 (D-344).
   autoconfigure:
     exclude: org.springframework.boot.autoconfigure.webservices.WebServicesAutoConfiguration
   mvc:

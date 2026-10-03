@@ -1,0 +1,16 @@
+polling:
+  enabled: false
+sfdc:
+  user: test-user@example.com
+  password: test-password
+  securityToken: test-security-token
+  key: test-consumer-key
+  secret: test-consumer-secret
+  login-url: http://localhost:0
+# Tier 1 tests replace the MySQL DataSource with an embedded H2 DataSource in MODE=MySQL (D-039, D-074).
+mysql:
+  host: localhost
+  user: test
+  password: test
+watermark:
+  store-dir: target/watermark-test

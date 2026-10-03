@@ -61,15 +61,15 @@ public final class SObjectMapper {
      *       kept unchanged.</li>
      *   <li>Only the first non-null {@code Id} is kept: a later {@code Id} child replaces the entry only
      *       while the entry is absent or {@code null}.</li>
-     *   <li>The {@code type} child is skipped, and {@code type} is put as the last entry with the value of
-     *       {@link SObject#getType()}.</li>
+     *   <li>The {@code type} child is skipped; after every child has been read, the {@code type} entry is
+     *       put with the value of {@link SObject#getType()}.</li>
      * </ul>
      *
      * <p>The result is a new, mutable {@link HashMap} created with its default capacity; the record is
      * not modified.
      *
      * @param record the partner-API query record
-     * @return a new {@link HashMap} of field name to value, ending with the {@code type} entry
+     * @return a new {@link HashMap} of field name to value, including the {@code type} entry
      * @throws NullPointerException if {@code record} is {@code null}
      */
     public static Map<String, Object> toMap(SObject record) {

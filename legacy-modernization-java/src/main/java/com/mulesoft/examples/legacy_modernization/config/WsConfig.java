@@ -1,6 +1,7 @@
 package com.mulesoft.examples.legacy_modernization.config;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import javax.xml.namespace.QName;
@@ -314,6 +315,10 @@ public class WsConfig implements WsConfigurer {
          * {@link QName#toString()} form: {@code {namespace}local}, or {@code local} for an element without a
          * namespace.
          *
+         * <p>With DEBUG enabled, the line {@code Request payload root <root> matches no endpoint} is logged first; it
+         * renders the payload root with its control characters escaped as {@code escapeControls} describes (D-339),
+         * while the exception message keeps the root's {@link QName#toString()} form.
+         *
          * @param messageContext the message context of the request
          * @return {@code null} when the request has no payload or no payload root element
          * @throws UnexpectedWrapperElementException when the request has a payload root element
@@ -329,9 +334,33 @@ public class WsConfig implements WsConfigurer {
             if (root == null) {
                 return null;
             }
-            LOG.debug("Request payload root {} matches no endpoint", root);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Request payload root {} matches no endpoint", escapeControls(root.toString()));
+            }
             throw new UnexpectedWrapperElementException(
                     "Unexpected wrapper element " + root + " found.   Expected " + EXPECTED_WRAPPER + ".");
+        }
+
+        /**
+         * Returns {@code value} with each ISO control character (U+0000 to U+001F and U+007F to U+009F) and each
+         * U+2028 line separator and U+2029 paragraph separator replaced by a six-character escape: a backslash, the
+         * letter {@code u} and the character's code in four upper-case hexadecimal digits. A line feed is written as
+         * backslash-u000A and a carriage return as backslash-u000D; every other character is kept unchanged (D-339).
+         *
+         * @param value the text to escape
+         * @return the escaped text
+         */
+        private static String escapeControls(String value) {
+            StringBuilder escaped = new StringBuilder(value.length());
+            for (int i = 0; i < value.length(); i++) {
+                char c = value.charAt(i);
+                if (Character.isISOControl(c) || c == 0x2028 || c == 0x2029) {
+                    escaped.append(String.format(Locale.ROOT, "\\u%04X", (int) c));
+                } else {
+                    escaped.append(c);
+                }
+            }
+            return escaped.toString();
         }
 
         /**

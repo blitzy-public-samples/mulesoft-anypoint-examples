@@ -60,7 +60,9 @@ public final class RawHttp {
      *   <li>an empty line.</li>
      * </ol>
      * The body bytes follow the head unchanged, and the output is flushed without being shut down.
-     * The socket read timeout is 10 seconds. The reply is parsed as {@link Response} describes.
+     * The socket read timeout is 10 seconds. The reply is parsed as {@link Response} describes. A reply
+     * to a {@code HEAD} request, matched case-sensitively, has an empty body and is not read past its
+     * header block, whatever its {@code Content-Length} or {@code Transfer-Encoding}. See D-340.
      *
      * @param port         the local port of the server
      * @param method       the request method, written as given
@@ -70,8 +72,8 @@ public final class RawHttp {
      * @return the parsed reply
      * @throws NullPointerException when {@code method}, {@code pathAndQuery}, a header name or a
      *                              header value is {@code null}
-     * @throws EOFException         when the connection closes before the header block or the
-     *                              framed body is complete
+     * @throws EOFException         when the connection closes before the header block or, for a
+     *                              method other than {@code HEAD}, the framed body is complete
      * @throws IOException          when the connection fails, the read times out, or the status
      *                              line, {@code Content-Length} or a chunk size is malformed
      */
@@ -90,7 +92,7 @@ public final class RawHttp {
             out.write(head);
             out.write(payload);
             out.flush();
-            return readResponse(new BufferedInputStream(socket.getInputStream()));
+            return readResponse(new BufferedInputStream(socket.getInputStream()), method);
         }
     }
 
@@ -121,15 +123,18 @@ public final class RawHttp {
                 || name.equalsIgnoreCase("Connection");
     }
 
-    /** Header block, then the body framed by {@code Transfer-Encoding}, {@code Content-Length} or EOF. */
-    private static Response readResponse(InputStream in) throws IOException {
+    /**
+     * Header block, then an empty body for {@code HEAD}, otherwise the body framed by
+     * {@code Transfer-Encoding}, {@code Content-Length} or EOF.
+     */
+    private static Response readResponse(InputStream in, String method) throws IOException {
         String block = readHeaderBlock(in);
         int statusLineEnd = block.indexOf(CRLF);
         String statusLine = statusLineEnd < 0 ? block : block.substring(0, statusLineEnd);
         String rawHeaders = statusLineEnd < 0 ? "" : block.substring(statusLineEnd + CRLF.length());
         Map<String, String> headers = parseHeaders(rawHeaders);
         int statusCode = statusCode(statusLine);
-        byte[] body = readBody(in, headers);
+        byte[] body = "HEAD".equals(method) ? new byte[0] : readBody(in, headers);
         return new Response(statusLine, statusCode, reasonPhrase(statusLine), rawHeaders, headers, body);
     }
 
@@ -303,7 +308,8 @@ public final class RawHttp {
      * @param headers      unmodifiable map of lower-cased header name to the first trimmed value
      *                     received, in arrival order; repeated headers appear in full only in
      *                     {@code rawHeaders}
-     * @param body         the de-framed body bytes; zero length when the reply has no body
+     * @param body         the de-framed body bytes; zero length when the reply has no body or answers a
+     *                     {@code HEAD} request
      */
     public record Response(String statusLine, int statusCode, String reasonPhrase, String rawHeaders,
             Map<String, String> headers, byte[] body) {

@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.stream.IntStream;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
  * Binds the seven HTTP listener addresses of the loan broker from the root {@code listener} map of
@@ -27,6 +28,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * <p>The map keys keep their dashed YAML form. The record is registered by
  * {@code @ConfigurationPropertiesScan} on the application class.
  *
+ * <p>The constructor checks each entry present under {@code http-listener-configuration-1} …
+ * {@code -7} while the context starts and throws {@link IllegalArgumentException} for the first
+ * unusable field, with a message that starts with its key, for example
+ * {@code listener.http-listener-configuration-4.port}: a {@code host} that is absent, blank or starts
+ * with {@code TODO}; a {@code port} that is absent, which binds as {@code -1} and is reported as
+ * required; or a {@code port} outside {@code 0} … {@code 65535} for listener 1 and outside
+ * {@code 1} … {@code 65535} for listeners 2 … 7. The {@code base-path} is not checked. An absent
+ * entry is not rejected here: {@link #listener(int)} and the helpers that read it throw for it.
+ * Keys of any other form, such as {@code httplistenerconfiguration1}, are not checked. The check
+ * makes no network request and binds no port.
+ *
  * <p>Usage:
  * <pre>{@code
  * Listener bank2 = listenerProperties.listener(4);              // HTTP_Listener_Configuration_4, Bank2
@@ -42,7 +54,7 @@ public record ListenerProperties(Map<String, Listener> listener) {
     /** Key prefix of every listener entry; the listener number follows it. */
     private static final String KEY_PREFIX = "http-listener-configuration-";
 
-    /** Property path of the {@code listener} map, used in the missing-entry message. */
+    /** Property path of the {@code listener} map, used in the missing-entry and invalid-field messages. */
     private static final String PROPERTY_PATH = "listener.";
 
     /** Listener number of the SOAP credit agency ({@code HTTP_Listener_Configuration_2}). */
@@ -60,16 +72,84 @@ public record ListenerProperties(Map<String, Listener> listener) {
     /** Listener number of the last listener opened beside {@code server.port}. */
     private static final int LAST_ADDITIONAL = 7;
 
+    /** Listener number of the loan broker ({@code HTTP_Listener_Configuration_1}). */
+    private static final int PRIMARY = 1;
+
+    /** Lowest port of listener 1; {@code 0} selects a free port. */
+    private static final int MIN_PRIMARY_PORT = 0;
+
+    /** Lowest port of listeners 2 … 7. */
+    private static final int MIN_ADDITIONAL_PORT = 1;
+
+    /** Highest port of any listener. */
+    private static final int MAX_PORT = 65535;
+
+    /** Port an entry binds when its {@code port} key is absent. */
+    private static final int ABSENT_PORT = -1;
+
+    /** Text that opens an unfilled placeholder value. */
+    private static final String PLACEHOLDER = "TODO";
+
     /**
      * Replaces a {@code null} map with {@link Map#of()} and stores any other map as an unmodifiable
-     * copy that keeps the binder's key order.
+     * copy that keeps the binder's key order, then checks the entries present under
+     * {@code http-listener-configuration-1} … {@code -7} in that order.
      *
      * @param listener listener entries by key {@code http-listener-configuration-<n>}, or {@code null}
+     * @throws IllegalArgumentException whose message starts with
+     *         {@code listener.http-listener-configuration-<n>.host} or {@code .port} for the first
+     *         present entry whose host is absent, blank or starts with {@code TODO}, whose port is
+     *         absent (bound as {@code -1}), or whose port is outside {@code 0} … {@code 65535}
+     *         (listener 1) or {@code 1} … {@code 65535} (listeners 2 … 7)
      */
     public ListenerProperties {
         listener = (listener == null)
                 ? Map.of()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(listener));
+        requireUsableEntries(listener);
+    }
+
+    /**
+     * Checks the host and port of each entry present under {@code http-listener-configuration-1} …
+     * {@code -7}, in ascending order. Absent entries and keys of any other form are not checked.
+     *
+     * @param listener bound listener entries by key
+     * @throws IllegalArgumentException with the message
+     *         {@code listener.http-listener-configuration-<n>.host is required} when the host is
+     *         absent, {@code listener.http-listener-configuration-<n>.host must not be blank or the TODO
+     *         placeholder: <host>} when it is blank or starts with {@code TODO},
+     *         {@code listener.http-listener-configuration-<n>.port is required} when the port is
+     *         {@code -1}, the value an absent port binds, and
+     *         {@code listener.http-listener-configuration-<n>.port must be between <min> and 65535:
+     *         <port>} when any other port is below {@code <min>}, {@code 0} for listener 1 and
+     *         {@code 1} for listeners 2 … 7, or above {@code 65535}
+     */
+    private static void requireUsableEntries(Map<String, Listener> listener) {
+        for (int n = PRIMARY; n <= LAST_ADDITIONAL; n++) {
+            String key = KEY_PREFIX + n;
+            Listener entry = listener.get(key);
+            if (entry == null) {
+                continue;
+            }
+            String host = entry.host();
+            String hostKey = PROPERTY_PATH + key + ".host";
+            if (host == null) {
+                throw new IllegalArgumentException(hostKey + " is required");
+            }
+            if (host.isBlank() || host.strip().startsWith(PLACEHOLDER)) {
+                throw new IllegalArgumentException(
+                        hostKey + " must not be blank or the TODO placeholder: " + host);
+            }
+            int minPort = (n == PRIMARY) ? MIN_PRIMARY_PORT : MIN_ADDITIONAL_PORT;
+            int port = entry.port();
+            if (port == ABSENT_PORT) {
+                throw new IllegalArgumentException(PROPERTY_PATH + key + ".port is required");
+            }
+            if (port < minPort || port > MAX_PORT) {
+                throw new IllegalArgumentException(PROPERTY_PATH + key + ".port must be between "
+                        + minPort + " and " + MAX_PORT + ": " + port);
+            }
+        }
     }
 
     /**
@@ -154,17 +234,19 @@ public record ListenerProperties(Map<String, Listener> listener) {
      * {@code .port} and {@code .base-path}.
      *
      * @param host     interface address the listener binds, for example {@code 0.0.0.0}
-     * @param port     TCP port the listener accepts on
+     * @param port     TCP port the listener accepts on; an absent {@code port} key binds as {@code -1},
+     *                 which {@link ListenerProperties} reports as required
      * @param basePath path prefix of every path the listener serves; a {@code null} value binds as
      *                 {@code ""}, the value of listener 1, which has no base path
      */
-    public record Listener(String host, int port, String basePath) {
+    public record Listener(String host, @DefaultValue("-1") int port, String basePath) {
 
         /**
          * Replaces a {@code null} base path with {@code ""}.
          *
          * @param host     interface address the listener binds
-         * @param port     TCP port the listener accepts on
+         * @param port     TCP port the listener accepts on, or {@code -1} when the {@code port} key is
+         *                 absent
          * @param basePath path prefix of the listener, or {@code null}
          */
         public Listener {

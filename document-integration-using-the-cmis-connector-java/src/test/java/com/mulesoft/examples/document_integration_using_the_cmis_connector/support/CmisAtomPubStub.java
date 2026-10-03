@@ -133,9 +133,10 @@ public final class CmisAtomPubStub extends Dispatcher {
         /** Answers the service document request with 401 and a {@code Basic} challenge. */
         SERVICE_DOCUMENT_401,
         /**
-         * Answers {@link #peek()} and every request with {@link SocketPolicy#DISCONNECT_AT_START}: MockWebServer
-         * closes each new connection before reading a request. A request on a connection opened before the
-         * switch receives that response as an empty 200.
+         * Closes connections without an HTTP response. {@link #peek()} answers with
+         * {@link SocketPolicy#DISCONNECT_AT_START}: MockWebServer closes each new connection before reading a
+         * request. Every request answers with {@link SocketPolicy#DISCONNECT_AFTER_REQUEST}: a request received on
+         * a connection opened before the switch is read, and the connection is then closed with no response.
          */
         DISCONNECT
     }
@@ -195,7 +196,8 @@ public final class CmisAtomPubStub extends Dispatcher {
      * Records the request, then answers it by the current mode and the routes described on the class.
      * Requests that match no route, including those whose body fails to parse, answer 404 with an empty
      * body. In {@link Mode#DISCONNECT} every request answers with
-     * {@link SocketPolicy#DISCONNECT_AT_START}.
+     * {@link SocketPolicy#DISCONNECT_AFTER_REQUEST}: MockWebServer closes the connection after reading the
+     * request and sends no response.
      *
      * @param request the request MockWebServer received; for a connection closed at its start, the
      *                bookkeeping request whose method and path are null
@@ -208,7 +210,7 @@ public final class CmisAtomPubStub extends Dispatcher {
         }
         Mode current = mode;
         if (current == Mode.DISCONNECT) {
-            return disconnect();
+            return disconnectAfterRequest();
         }
         try {
             return route(request, current);
@@ -220,14 +222,15 @@ public final class CmisAtomPubStub extends Dispatcher {
 
     /**
      * Returns the socket policy MockWebServer applies to each new connection: in {@link Mode#DISCONNECT} a
-     * response with {@link SocketPolicy#DISCONNECT_AT_START}, otherwise the inherited default.
+     * response with {@link SocketPolicy#DISCONNECT_AT_START}, which closes the connection before a request is
+     * read, otherwise the inherited default.
      *
      * @return the response whose socket policy governs the next connection
      */
     @Override
     public MockResponse peek() {
         if (mode == Mode.DISCONNECT) {
-            return disconnect();
+            return disconnectAtStart();
         }
         return super.peek();
     }
@@ -432,12 +435,22 @@ public final class CmisAtomPubStub extends Dispatcher {
     }
 
     /**
-     * Builds the answer that closes the connection at its start.
+     * Builds the {@link #peek()} answer that closes a new connection before a request is read.
      *
      * @return a response with {@link SocketPolicy#DISCONNECT_AT_START}
      */
-    private static MockResponse disconnect() {
+    private static MockResponse disconnectAtStart() {
         return new MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START);
+    }
+
+    /**
+     * Builds the {@link #dispatch(RecordedRequest)} answer that closes the connection after the request is
+     * read, with no response.
+     *
+     * @return a response with {@link SocketPolicy#DISCONNECT_AFTER_REQUEST}
+     */
+    private static MockResponse disconnectAfterRequest() {
+        return new MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST);
     }
 
     /**

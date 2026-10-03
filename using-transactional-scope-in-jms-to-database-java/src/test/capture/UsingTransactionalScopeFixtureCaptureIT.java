@@ -11,19 +11,30 @@ package org.mule.examples;
 import static org.junit.Assert.fail;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -40,6 +51,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mule.MessageExchangePattern;
 import org.mule.api.MuleEvent;
+import org.mule.api.MuleException;
 import org.mule.api.MuleMessage;
 import org.mule.module.client.MuleClient;
 import org.mule.processor.chain.SubflowInterceptingChainLifecycleWrapper;
@@ -66,12 +78,32 @@ import org.mule.tck.junit4.FunctionalTestCase;
  * holding what the original produced (D-023). Mule's verbose exception
  * messages are switched on for the class (D-185). Business outcomes are written as
  * observed and never asserted. A test fails only when the capture cannot be
- * completed: {@code capture.out} is unset, the log appender received nothing,
- * or a wait times out.
+ * completed: {@code capture.out} is unset, the log appender cannot be
+ * registered or received nothing, a wait times out, or a Mule, database or
+ * file step fails. Its failure message starts with the fixture identity
+ * {@code using-transactional-scope-in-jms-to-database_<scenario>}, and the
+ * message and the copied cause of a failed step carry no password (D-334).
  * <p>
  * The Mule context, and with it the in-VM broker, is created for each test
- * method; the MySQL database created by {@link MySQLDbCreator} from the copy's
- * {@code src/test/resources/mule.test.properties} serves the whole class.
+ * method; one MySQL schema serves the whole class. Its name is {@code company}
+ * followed by a random UUID without hyphens, 39 lowercase alphanumeric
+ * characters (D-333).
+ * <p>
+ * Before any Mule context starts, {@link #prepareCapture()} reads
+ * {@code database.user}, {@code database.password} and {@code database.url}
+ * from the copy's {@code src/test/resources/mule.test.properties}, checks that
+ * the schema does not exist yet, creates it with the original
+ * {@link MySQLDbCreator}, checks that it exists and that its {@code orders}
+ * table is reachable through the {@code jdbc.url} value and empty, and only
+ * then sets {@code jdbc.url} and {@value #VERBOSE_EXCEPTIONS_PROPERTY}.
+ * {@link #tearDownCapture()} drops a schema this class created with the same
+ * helper, checks that it is gone, and restores both system properties to
+ * their values before the class ran, clearing those that were unset. A failed
+ * step fails the class with a message that starts with
+ * {@code using-transactional-scope-in-jms-to-database capture setup:} or
+ * {@code using-transactional-scope-in-jms-to-database capture teardown:} and
+ * names the step, the properties file, the required keys and the schema; the
+ * message and the copied causes carry no password (D-334).
  * <p>
  * Usage, from the isolated copy:
  * <pre>
@@ -87,14 +119,44 @@ public class UsingTransactionalScopeFixtureCaptureIT extends FunctionalTestCase
     /** Git-ignored database settings of the copy: database.user, database.password, database.url. */
     private static final String PATH_TO_TEST_PROPERTIES = "./src/test/resources/mule.test.properties";
 
+    /** Key of the database user in {@link #PATH_TO_TEST_PROPERTIES}; its value must not be blank. */
+    private static final String DATABASE_USER_KEY = "database.user";
+
+    /** Key of the database password in {@link #PATH_TO_TEST_PROPERTIES}; its value may be empty. */
+    private static final String DATABASE_PASSWORD_KEY = "database.password";
+
+    /** Key of the server URL in {@link #PATH_TO_TEST_PROPERTIES}, to which the schema name is appended; its value must not be blank. */
+    private static final String DATABASE_URL_KEY = "database.url";
+
+    /** Keys {@link #PATH_TO_TEST_PROPERTIES} must define, in the order failure messages list them. */
+    private static final String[] REQUIRED_KEYS = {DATABASE_USER_KEY, DATABASE_PASSWORD_KEY, DATABASE_URL_KEY};
+
     /** Schema script the database is created from. */
     private static final String PATH_TO_SQL_SCRIPT = "src/main/resources/order.sql";
 
     /** Order sent to queue {@code in}. */
     private static final String PATH_TO_MESSAGE = "./src/test/resources/message.xml";
 
-    /** Database created for this class and dropped after it. */
-    private static final MySQLDbCreator DBCREATOR = new MySQLDbCreator("company" + System.currentTimeMillis(), PATH_TO_SQL_SCRIPT, PATH_TO_TEST_PROPERTIES);
+    /** Schema created for this class and dropped after it: {@code company} and a random UUID without hyphens (D-333). */
+    private static final String DATABASE_NAME = "company" + UUID.randomUUID().toString().replace("-", "");
+
+    /** Query counting the schemas named by its single parameter. */
+    private static final String SCHEMA_COUNT_QUERY = "select count(*) from information_schema.schemata where schema_name = ?";
+
+    /** System property the original configuration binds as the database URL. */
+    private static final String JDBC_URL_PROPERTY = "jdbc.url";
+
+    /** Prefix of every failure of {@link #prepareCapture()} (D-334). */
+    private static final String SETUP_CONTEXT = EXAMPLE + " capture setup: ";
+
+    /** Prefix of every failure of {@link #tearDownCapture()} (D-334). */
+    private static final String TEARDOWN_CONTEXT = EXAMPLE + " capture teardown: ";
+
+    /** Text that replaces a credential value in failure messages (D-334). */
+    private static final String REDACTED = "****";
+
+    /** A {@code password=} parameter of any letter case and its value, up to the next {@code &}, {@code ;} or whitespace. */
+    private static final Pattern PASSWORD_PARAMETER = Pattern.compile("(?i)(password=)[^&;\\s]*");
 
     /** System property naming the directory the fixtures are written to. */
     private static final String CAPTURE_OUT_PROPERTY = "capture.out";
@@ -146,6 +208,16 @@ public class UsingTransactionalScopeFixtureCaptureIT extends FunctionalTestCase
     /** Timeout of the request on {@code jms://out}. */
     private static final long OUT_REQUEST_TIMEOUT_MILLIS = 10000L;
 
+    /** Seconds added to the redelivery wait and the {@code jms://out} request in {@link #MIN_TEST_TIMEOUT_SECS}. */
+    private static final int TEST_TIMEOUT_MARGIN_SECS = 60;
+
+    /**
+     * Lower bound of the per-test timeout: 60 000 ms, 10 000 ms and
+     * {@value #TEST_TIMEOUT_MARGIN_SECS} s, 130 s (D-337).
+     */
+    private static final int MIN_TEST_TIMEOUT_SECS =
+            (int) ((REDELIVERY_WAIT_MILLIS + OUT_REQUEST_TIMEOUT_MILLIS) / 1000L) + TEST_TIMEOUT_MARGIN_SECS;
+
     /** Number of trailing entries listed when the wait times out. */
     private static final int TRAILING_ENTRIES_REPORTED = 5;
 
@@ -166,6 +238,27 @@ public class UsingTransactionalScopeFixtureCaptureIT extends FunctionalTestCase
     /** Value of {@value #VERBOSE_EXCEPTIONS_PROPERTY} before this class ran, or {@code null} when unset. */
     private static String previousVerboseExceptions;
 
+    /** Value of {@value #JDBC_URL_PROPERTY} before this class ran, or {@code null} when unset. */
+    private static String previousJdbcUrl;
+
+    /** True once {@link #prepareCapture()} has saved {@link #previousVerboseExceptions} and {@link #previousJdbcUrl}. */
+    private static boolean propertiesSaved;
+
+    /** Value of {@value #DATABASE_URL_KEY}, or {@code null} before setup and after teardown. */
+    private static String databaseUrl;
+
+    /** Value of {@value #DATABASE_USER_KEY}, or {@code null} before setup and after teardown. */
+    private static String databaseUser;
+
+    /** Value of {@value #DATABASE_PASSWORD_KEY}, or {@code null} before setup and after teardown. */
+    private static String databasePassword;
+
+    /** Original helper creating and dropping {@link #DATABASE_NAME}; built once the settings are checked, {@code null} before and after. */
+    private static MySQLDbCreator dbCreator;
+
+    /** True from the moment {@link #DATABASE_NAME} is seen to exist after creation until it is seen to be dropped. */
+    private static boolean schemaCreated;
+
     /** Logger contexts whose root configuration holds {@link #APPENDER} during the current test. */
     private final List<LoggerContext> registeredContexts = new ArrayList<LoggerContext>();
 
@@ -178,60 +271,430 @@ public class UsingTransactionalScopeFixtureCaptureIT extends FunctionalTestCase
     }
 
     /**
-     * Reads the order, creates the database from {@code order.sql} and exposes
-     * its URL as the {@code jdbc.url} property the original configuration binds.
-     * Sets {@value #VERBOSE_EXCEPTIONS_PROPERTY} to {@code true} for the Mule
-     * contexts of this class, whose exception log entries then carry the
-     * {@value #ROOT_EXCEPTION_MARKER} line (D-185).
+     * Timeout of each test in the inherited timeout rule: the configured
+     * {@code mule.test.timeoutSecs} value or {@link #MIN_TEST_TIMEOUT_SECS},
+     * whichever is larger. A redelivery wait that times out fails with its
+     * {@link #timeoutMessage(String, List)} before this timeout (D-337).
      */
-    @BeforeClass
-    public static void prepareCapture() throws IOException
+    @Override
+    public int getTestTimeoutSecs()
     {
-        Path messagePath = Paths.get(PATH_TO_MESSAGE);
-        MESSAGE_BYTES = Files.readAllBytes(messagePath);
-        MESSAGE = new String(MESSAGE_BYTES, StandardCharsets.UTF_8);
-        previousVerboseExceptions = System.getProperty(VERBOSE_EXCEPTIONS_PROPERTY);
-        System.setProperty(VERBOSE_EXCEPTIONS_PROPERTY, "true");
-        DBCREATOR.setUpDatabase();
-        System.setProperty("jdbc.url", DBCREATOR.getDatabaseUrlWithName());
+        return Math.max(super.getTestTimeoutSecs(), MIN_TEST_TIMEOUT_SECS);
     }
 
-    /** Drops the database created for this class and restores {@value #VERBOSE_EXCEPTIONS_PROPERTY}. */
+    /**
+     * Prepares the class, in this order: saves the values of
+     * {@value #VERBOSE_EXCEPTIONS_PROPERTY} and {@value #JDBC_URL_PROPERTY};
+     * reads the order; reads {@link #PATH_TO_TEST_PROPERTIES} and checks that it
+     * defines {@value #DATABASE_USER_KEY}, {@value #DATABASE_PASSWORD_KEY} and
+     * {@value #DATABASE_URL_KEY}, with a non-blank user and URL; checks over a
+     * connection to the server URL that {@link #DATABASE_NAME} does not exist;
+     * creates it from {@code order.sql} with {@link MySQLDbCreator#setUpDatabase()};
+     * checks that it exists; checks over
+     * {@link MySQLDbCreator#getDatabaseUrlWithName()} that its {@code orders}
+     * table holds no row. Only then sets {@value #VERBOSE_EXCEPTIONS_PROPERTY}
+     * to {@code true} for the Mule contexts of this class, whose exception log
+     * entries then carry the {@value #ROOT_EXCEPTION_MARKER} line (D-185), and
+     * {@value #JDBC_URL_PROPERTY} to the URL of the new schema, the property the
+     * original configuration binds (D-334).
+     *
+     * @throws AssertionError when a step fails; the message starts with
+     *         {@value #SETUP_CONTEXT} and carries no password, and the cause, when
+     *         present, is the {@link #redactedCopy(Throwable)} of the failure
+     */
+    @BeforeClass
+    public static void prepareCapture()
+    {
+        previousVerboseExceptions = System.getProperty(VERBOSE_EXCEPTIONS_PROPERTY);
+        previousJdbcUrl = System.getProperty(JDBC_URL_PROPERTY);
+        propertiesSaved = true;
+
+        try
+        {
+            MESSAGE_BYTES = Files.readAllBytes(Paths.get(PATH_TO_MESSAGE));
+        }
+        catch (IOException e)
+        {
+            throw setupFailure("read message", "the order " + PATH_TO_MESSAGE + " cannot be read", e);
+        }
+        MESSAGE = new String(MESSAGE_BYTES, StandardCharsets.UTF_8);
+
+        loadDatabaseSettings();
+
+        long existing;
+        try
+        {
+            existing = countSchemas();
+        }
+        catch (SQLException e)
+        {
+            throw setupFailure("check schema absent", "information_schema.schemata cannot be queried over the "
+                               + DATABASE_URL_KEY + " server as " + DATABASE_USER_KEY, e);
+        }
+        if (existing != 0)
+        {
+            throw setupFailure("check schema absent", "the schema already exists on the " + DATABASE_URL_KEY
+                               + " server; it is left in place and not dropped", null);
+        }
+
+        dbCreator = new MySQLDbCreator(DATABASE_NAME, PATH_TO_SQL_SCRIPT, PATH_TO_TEST_PROPERTIES);
+        dbCreator.setUpDatabase();
+
+        long created;
+        try
+        {
+            created = countSchemas();
+        }
+        catch (SQLException e)
+        {
+            throw setupFailure("create schema", "information_schema.schemata cannot be queried after "
+                               + "MySQLDbCreator.setUpDatabase() ran " + PATH_TO_SQL_SCRIPT
+                               + "; drop the schema by hand if it exists", e);
+        }
+        if (created > 0)
+        {
+            schemaCreated = true;
+        }
+        if (created == 0)
+        {
+            throw setupFailure("create schema", "MySQLDbCreator.setUpDatabase() did not create the schema from "
+                               + PATH_TO_SQL_SCRIPT + "; MySQLDbCreator logs its own error above", null);
+        }
+        if (created != 1)
+        {
+            throw setupFailure("create schema", "information_schema.schemata lists the schema " + created
+                               + " times, expected once", null);
+        }
+
+        long orders;
+        try
+        {
+            orders = countOrders();
+        }
+        catch (SQLException e)
+        {
+            throw setupFailure("check orders table", "\"" + SELECT_ORDERS_QUERY + "\" cannot run over "
+                               + "MySQLDbCreator.getDatabaseUrlWithName(), the " + JDBC_URL_PROPERTY
+                               + " value; MySQLDbCreator logs its own error above when " + PATH_TO_SQL_SCRIPT
+                               + " failed", e);
+        }
+        if (orders != 0)
+        {
+            throw setupFailure("check orders table", "table orders holds " + orders + " rows, expected 0", null);
+        }
+
+        System.setProperty(VERBOSE_EXCEPTIONS_PROPERTY, "true");
+        System.setProperty(JDBC_URL_PROPERTY, dbCreator.getDatabaseUrlWithName());
+    }
+
+    /**
+     * Ends the class, also after a failed or partial {@link #prepareCapture()}.
+     * When this class created {@link #DATABASE_NAME}, drops it with
+     * {@link MySQLDbCreator#tearDownDataBase()} and checks over a new connection
+     * to the server URL that it no longer exists. Then, when
+     * {@link #prepareCapture()} saved them, restores
+     * {@value #VERBOSE_EXCEPTIONS_PROPERTY} and {@value #JDBC_URL_PROPERTY} to
+     * their values before the class ran, clearing a property that was unset,
+     * and discards the settings, the helper and the saved values (D-334).
+     *
+     * @throws AssertionError after the restore, when the schema still exists or
+     *         its removal cannot be checked; the message starts with
+     *         {@value #TEARDOWN_CONTEXT}, names the schema to drop by hand and
+     *         carries no password
+     */
     @AfterClass
     public static void tearDownCapture()
     {
+        AssertionError failure = null;
         try
         {
-            DBCREATOR.tearDownDataBase();
+            if (schemaCreated)
+            {
+                failure = dropSchema();
+            }
         }
         finally
         {
-            if (previousVerboseExceptions == null)
+            if (propertiesSaved)
             {
-                System.clearProperty(VERBOSE_EXCEPTIONS_PROPERTY);
+                restoreProperty(VERBOSE_EXCEPTIONS_PROPERTY, previousVerboseExceptions);
+                restoreProperty(JDBC_URL_PROPERTY, previousJdbcUrl);
             }
-            else
+            propertiesSaved = false;
+            previousVerboseExceptions = null;
+            previousJdbcUrl = null;
+            schemaCreated = false;
+            dbCreator = null;
+            databaseUrl = null;
+            databaseUser = null;
+            databasePassword = null;
+        }
+        if (failure != null)
+        {
+            throw failure;
+        }
+    }
+
+    /**
+     * Reads {@link #PATH_TO_TEST_PROPERTIES} with {@link Properties#load(InputStream)},
+     * as {@link MySQLDbCreator} does, keeps the three settings and checks them:
+     * every key of {@link #REQUIRED_KEYS} is defined, and the values of
+     * {@value #DATABASE_USER_KEY} and {@value #DATABASE_URL_KEY} are not blank.
+     *
+     * @throws AssertionError when the file cannot be read, or listing every
+     *         missing key and every blank value by key name
+     */
+    private static void loadDatabaseSettings()
+    {
+        Properties settings = new Properties();
+        try (InputStream in = new FileInputStream(PATH_TO_TEST_PROPERTIES))
+        {
+            settings.load(in);
+        }
+        catch (IOException | IllegalArgumentException e)
+        {
+            throw setupFailure("read properties", "the properties file cannot be read", e);
+        }
+        databasePassword = settings.getProperty(DATABASE_PASSWORD_KEY);
+        databaseUser = settings.getProperty(DATABASE_USER_KEY);
+        databaseUrl = settings.getProperty(DATABASE_URL_KEY);
+
+        List<String> missing = new ArrayList<String>();
+        for (String key : REQUIRED_KEYS)
+        {
+            if (settings.getProperty(key) == null)
             {
-                System.setProperty(VERBOSE_EXCEPTIONS_PROPERTY, previousVerboseExceptions);
+                missing.add(key);
             }
         }
+        List<String> blank = new ArrayList<String>();
+        if (databaseUser != null && databaseUser.trim().isEmpty())
+        {
+            blank.add(DATABASE_USER_KEY);
+        }
+        if (databaseUrl != null && databaseUrl.trim().isEmpty())
+        {
+            blank.add(DATABASE_URL_KEY);
+        }
+        if (missing.isEmpty() && blank.isEmpty())
+        {
+            return;
+        }
+        StringBuilder detail = new StringBuilder();
+        if (!missing.isEmpty())
+        {
+            detail.append("missing keys: ").append(join(missing));
+        }
+        if (!blank.isEmpty())
+        {
+            detail.append(missing.isEmpty() ? "" : "; ").append("blank values: ").append(join(blank));
+        }
+        detail.append(" (").append(DATABASE_USER_KEY).append(" and ").append(DATABASE_URL_KEY)
+              .append(" must not be blank, ").append(DATABASE_PASSWORD_KEY).append(" may be empty)");
+        throw setupFailure("check properties", detail.toString(), null);
+    }
+
+    /**
+     * Drops {@link #DATABASE_NAME} with {@link MySQLDbCreator#tearDownDataBase()}
+     * and checks that {@code information_schema.schemata} no longer lists it.
+     *
+     * @return {@code null} when the schema is gone, otherwise the teardown failure to throw
+     */
+    private static AssertionError dropSchema()
+    {
+        dbCreator.tearDownDataBase();
+        long remaining;
+        try
+        {
+            remaining = countSchemas();
+        }
+        catch (SQLException e)
+        {
+            return teardownFailure("verify schema dropped", "information_schema.schemata cannot be queried after "
+                                   + "MySQLDbCreator.tearDownDataBase(); if the schema still exists, drop it by hand: DROP SCHEMA "
+                                   + DATABASE_NAME, e);
+        }
+        if (remaining != 0)
+        {
+            return teardownFailure("verify schema dropped", "the schema still exists after "
+                                   + "MySQLDbCreator.tearDownDataBase(), which logs its own error above; drop it by hand: DROP SCHEMA "
+                                   + DATABASE_NAME, null);
+        }
+        schemaCreated = false;
+        return null;
+    }
+
+    /** Sets {@code key} to {@code value}, or clears it when {@code value} is {@code null}. */
+    private static void restoreProperty(String key, String value)
+    {
+        if (value == null)
+        {
+            System.clearProperty(key);
+        }
+        else
+        {
+            System.setProperty(key, value);
+        }
+    }
+
+    /**
+     * Number of rows {@link #SCHEMA_COUNT_QUERY} counts for {@link #DATABASE_NAME},
+     * over a new connection to {@value #DATABASE_URL_KEY} as
+     * {@value #DATABASE_USER_KEY} with {@value #DATABASE_PASSWORD_KEY}.
+     */
+    private static long countSchemas() throws SQLException
+    {
+        try (Connection connection = DriverManager.getConnection(databaseUrl, databaseUser, databasePassword);
+             PreparedStatement statement = connection.prepareStatement(SCHEMA_COUNT_QUERY))
+        {
+            statement.setString(1, DATABASE_NAME);
+            try (ResultSet result = statement.executeQuery())
+            {
+                if (!result.next())
+                {
+                    throw new SQLException("\"" + SCHEMA_COUNT_QUERY + "\" returned no row");
+                }
+                return result.getLong(1);
+            }
+        }
+    }
+
+    /**
+     * Result of {@value #SELECT_ORDERS_QUERY} over a new connection to
+     * {@link MySQLDbCreator#getDatabaseUrlWithName()}, the URL the Mule
+     * contexts bind as {@value #JDBC_URL_PROPERTY}.
+     */
+    private static long countOrders() throws SQLException
+    {
+        try (Connection connection = DriverManager.getConnection(dbCreator.getDatabaseUrlWithName());
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery(SELECT_ORDERS_QUERY))
+        {
+            if (!result.next())
+            {
+                throw new SQLException("\"" + SELECT_ORDERS_QUERY + "\" returned no row");
+            }
+            return result.getLong(1);
+        }
+    }
+
+    /** Setup failure of {@code step}; see {@link #failure(String, String, String, Throwable)}. */
+    private static AssertionError setupFailure(String step, String detail, Throwable cause)
+    {
+        return failure(SETUP_CONTEXT, step, detail, cause);
+    }
+
+    /** Teardown failure of {@code step}; see {@link #failure(String, String, String, Throwable)}. */
+    private static AssertionError teardownFailure(String step, String detail, Throwable cause)
+    {
+        return failure(TEARDOWN_CONTEXT, step, detail, cause);
+    }
+
+    /**
+     * Failure whose message is {@code context}, the step, {@code detail}, the
+     * properties file with its absolute path, the required keys and the schema,
+     * passed through {@link #redact(String)}, and whose cause is the
+     * {@link #redactedCopy(Throwable)} of {@code cause}, or none when
+     * {@code cause} is {@code null}.
+     */
+    private static AssertionError failure(String context, String step, String detail, Throwable cause)
+    {
+        String message = redact(context + "step \"" + step + "\": " + detail
+                                + " [properties file " + PATH_TO_TEST_PROPERTIES
+                                + " (" + new File(PATH_TO_TEST_PROPERTIES).getAbsolutePath() + ")"
+                                + ", required keys " + join(Arrays.asList(REQUIRED_KEYS))
+                                + ", schema " + DATABASE_NAME + "]");
+        return cause == null ? new AssertionError(message) : new AssertionError(message, redactedCopy(cause));
+    }
+
+    /** {@code parts} separated by {@code ", "}. */
+    private static String join(List<String> parts)
+    {
+        StringBuilder joined = new StringBuilder();
+        for (String part : parts)
+        {
+            joined.append(joined.length() == 0 ? "" : ", ").append(part);
+        }
+        return joined.toString();
+    }
+
+    /**
+     * {@code text} with every occurrence of the {@value #DATABASE_PASSWORD_KEY}
+     * value, when it is set and not empty, and the value of every
+     * {@code password=} parameter, in any letter case, replaced by
+     * {@value #REDACTED}; {@code null} for {@code null} (D-334).
+     */
+    private static String redact(String text)
+    {
+        if (text == null)
+        {
+            return null;
+        }
+        String redacted = text;
+        String password = databasePassword;
+        if (password != null && !password.isEmpty())
+        {
+            redacted = redacted.replace(password, REDACTED);
+        }
+        return PASSWORD_PARAMETER.matcher(redacted).replaceAll("$1" + REDACTED);
+    }
+
+    /**
+     * Copy of {@code cause}, its cause chain and its suppressed throwables as
+     * {@link RedactedThrowable}s: each copy has the {@link #redact(String)}ed
+     * message, the class name in its {@code toString()} and the stack trace of
+     * the throwable it copies. A throwable met a second time is not copied
+     * again, which ends that branch of the copy (D-334).
+     *
+     * @return the copy, or {@code null} for {@code null}
+     */
+    private static Throwable redactedCopy(Throwable cause)
+    {
+        return copyRedacted(cause, Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>()));
+    }
+
+    /** {@link #redactedCopy(Throwable)} of {@code original}, skipping the throwables in {@code visited}, to which it adds those it copies. */
+    private static Throwable copyRedacted(Throwable original, Set<Throwable> visited)
+    {
+        if (original == null || !visited.add(original))
+        {
+            return null;
+        }
+        RedactedThrowable copy = new RedactedThrowable(original.getClass().getName(),
+                                                       redact(original.getLocalizedMessage()));
+        copy.setStackTrace(original.getStackTrace());
+        Throwable cause = copyRedacted(original.getCause(), visited);
+        if (cause != null)
+        {
+            copy.initCause(cause);
+        }
+        for (Throwable suppressed : original.getSuppressed())
+        {
+            Throwable suppressedCopy = copyRedacted(suppressed, visited);
+            if (suppressedCopy != null)
+            {
+                copy.addSuppressed(suppressedCopy);
+            }
+        }
+        return copy;
     }
 
     /**
      * Registers {@link #APPENDER} on the root logger configuration of every
      * distinct log4j-core context: the caller's context and the context of the
      * Mule execution class loader. Registration replaces any earlier
-     * registration of the same name.
+     * registration of the same name. Runs in the started Mule context of the
+     * test, before the order is sent.
+     *
+     * @param identity scenario identity that starts the failure message
      */
-    @Override
-    protected void doSetUp() throws Exception
+    private void registerAppender(String identity)
     {
-        super.doSetUp();
         registeredContexts.clear();
         Object primary = LogManager.getContext(false);
         if (!(primary instanceof LoggerContext))
         {
-            fail("appender " + APPENDER_NAME + " cannot be registered: the log4j context "
+            fail(identity + ": appender " + APPENDER_NAME + " cannot be registered: the log4j context "
                  + describe(primary) + " is not a log4j-core LoggerContext");
         }
         registeredContexts.add((LoggerContext) primary);
@@ -286,65 +749,120 @@ public class UsingTransactionalScopeFixtureCaptureIT extends FunctionalTestCase
      * Runs the original flow once and writes the fixture of {@code scenario}.
      *
      * @param scenario scenario name; the fixture identity is {@code EXAMPLE + "_" + scenario}
-     * @throws Exception when Mule, the database or the file system fails
+     * @throws Exception an {@link AssertionError} whose message starts with the
+     *         fixture identity and carries no password when a step fails; the
+     *         cause of a failed Mule, database or file step is the
+     *         {@link #redactedCopy(Throwable)} of the exception it raised (D-334)
      */
     private void capture(String scenario) throws Exception
     {
+        String identity = EXAMPLE + "_" + scenario;
         String captureOut = System.getProperty(CAPTURE_OUT_PROPERTY);
         if (captureOut == null || captureOut.trim().isEmpty())
         {
-            fail("system property capture.out is not set");
+            fail(identity + ": system property capture.out is not set");
         }
         File outputDirectory = new File(captureOut);
         if (!outputDirectory.mkdirs() && !outputDirectory.isDirectory())
         {
-            fail("capture.out directory cannot be created: " + outputDirectory.getAbsolutePath());
+            fail(identity + ": capture.out directory cannot be created: " + outputDirectory.getAbsolutePath());
         }
-        String identity = EXAMPLE + "_" + scenario;
 
+        registerAppender(identity);
         APPENDER.clear();
-        MuleClient client = new MuleClient(muleContext);
-        client.send(INBOUND_ENDPOINT, MESSAGE, null);
-
-        awaitRedeliveryLimit();
-
-        MuleMessage out = client.request(OUTBOUND_ENDPOINT, OUT_REQUEST_TIMEOUT_MILLIS);
-
-        SubflowInterceptingChainLifecycleWrapper subflow = getSubFlow("selectOrders");
-        subflow.initialise();
-        MuleEvent response = subflow.process(getTestEvent(null, MessageExchangePattern.REQUEST_RESPONSE));
-        if (response == null || response.getMessage() == null)
+        MuleClient client;
+        try
         {
-            fail("sub-flow selectOrders returned no message");
+            client = new MuleClient(muleContext);
+            client.send(INBOUND_ENDPOINT, MESSAGE, null);
         }
-        String records = response.getMessage().getPayloadAsString();
+        catch (MuleException e)
+        {
+            throw captureFailure(identity, "send to " + INBOUND_ENDPOINT, e);
+        }
+
+        awaitRedeliveryLimit(identity);
+
+        MuleMessage out;
+        try
+        {
+            out = client.request(OUTBOUND_ENDPOINT, OUT_REQUEST_TIMEOUT_MILLIS);
+        }
+        catch (MuleException e)
+        {
+            throw captureFailure(identity, "request on " + OUTBOUND_ENDPOINT, e);
+        }
+
+        String records;
+        try
+        {
+            SubflowInterceptingChainLifecycleWrapper subflow = getSubFlow("selectOrders");
+            subflow.initialise();
+            MuleEvent response = subflow.process(getTestEvent(null, MessageExchangePattern.REQUEST_RESPONSE));
+            if (response == null || response.getMessage() == null)
+            {
+                fail(identity + ": sub-flow selectOrders returned no message");
+            }
+            records = response.getMessage().getPayloadAsString();
+        }
+        catch (Exception e)
+        {
+            throw captureFailure(identity, "sub-flow selectOrders", e);
+        }
 
         List<Entry> entries = APPENDER.snapshot();
         if (!containsLoggerInfo(entries))
         {
-            fail("appender " + APPENDER_NAME + " received no " + LOGGER_CATEGORY + " INFO entry; "
+            fail(identity + ": appender " + APPENDER_NAME + " received no " + LOGGER_CATEGORY + " INFO entry; "
                  + entries.size() + " entries collected");
         }
 
-        byte[] outBytes = out == null ? null : out.getPayloadAsBytes();
+        byte[] outBytes;
+        try
+        {
+            outBytes = out == null ? null : out.getPayloadAsBytes();
+        }
+        catch (Exception e)
+        {
+            throw captureFailure(identity, "payload of the message from " + OUTBOUND_ENDPOINT, e);
+        }
         Map<String, Object> fixture = buildFixture(identity, records, entries, outBytes);
         Path target = new File(captureOut, identity + ".json").toPath();
-        Files.write(target, JsonWriter.write(fixture).getBytes(StandardCharsets.UTF_8));
+        try
+        {
+            Files.write(target, JsonWriter.write(fixture).getBytes(StandardCharsets.UTF_8));
+        }
+        catch (IOException e)
+        {
+            throw captureFailure(identity, "write of the fixture " + target.toAbsolutePath(), e);
+        }
+    }
+
+    /**
+     * Failure of capture step {@code step} of scenario {@code identity}: the
+     * {@link #failure(String, String, String, Throwable)} with the context
+     * {@code <identity>: }, the detail {@code cause.toString()} and the
+     * {@link #redactedCopy(Throwable)} of {@code cause} as its cause (D-334).
+     */
+    private static AssertionError captureFailure(String identity, String step, Throwable cause)
+    {
+        return failure(identity + ": ", step, String.valueOf(cause), cause);
     }
 
     /**
      * Polls the collected entries every 100 ms for up to 60 000 ms until an
-     * ERROR entry contains {@value #REDELIVERY_MARKER}, and fails with a
-     * summary of the collected entries on timeout.
+     * ERROR entry contains {@value #REDELIVERY_MARKER}, and on timeout fails
+     * with the {@link #redact(String)}ed {@link #timeoutMessage(String, List)}
+     * of {@code identity}.
      */
-    private static void awaitRedeliveryLimit() throws InterruptedException
+    private static void awaitRedeliveryLimit(String identity) throws InterruptedException
     {
         long deadline = System.currentTimeMillis() + REDELIVERY_WAIT_MILLIS;
         while (!containsRedeliveryLimit(APPENDER.snapshot()))
         {
             if (System.currentTimeMillis() >= deadline)
             {
-                fail(timeoutMessage(APPENDER.snapshot()));
+                fail(redact(timeoutMessage(identity, APPENDER.snapshot())));
             }
             Thread.sleep(POLL_INTERVAL_MILLIS);
         }
@@ -377,15 +895,17 @@ public class UsingTransactionalScopeFixtureCaptureIT extends FunctionalTestCase
     }
 
     /**
-     * Failure text of a timed-out wait: the entry count, a statement when the
-     * appender collected nothing, and the logger name and first line of each of
-     * the last five entries.
+     * Failure text of a timed-out wait of scenario {@code identity}: the
+     * identity, the entry count, a statement when the appender collected
+     * nothing, and the logger name and first line of each of the last five
+     * entries.
      */
-    private static String timeoutMessage(List<Entry> entries)
+    private static String timeoutMessage(String identity, List<Entry> entries)
     {
         StringBuilder message = new StringBuilder();
-        message.append("no ERROR entry containing \"").append(REDELIVERY_MARKER).append("\" within ")
-               .append(REDELIVERY_WAIT_MILLIS).append(" ms; ").append(entries.size()).append(" entries collected");
+        message.append(identity).append(": no ERROR entry containing \"").append(REDELIVERY_MARKER)
+               .append("\" within ").append(REDELIVERY_WAIT_MILLIS).append(" ms; ").append(entries.size())
+               .append(" entries collected");
         if (entries.isEmpty())
         {
             message.append("; appender ").append(APPENDER_NAME).append(" collected nothing");
@@ -633,6 +1153,31 @@ public class UsingTransactionalScopeFixtureCaptureIT extends FunctionalTestCase
         return context == null ? "null" : context.getClass().getName();
     }
 
+
+    /**
+     * Copy of another throwable made by {@link #redactedCopy(Throwable)}:
+     * {@link #toString()} is {@code <class name of the original>: <message>}, or
+     * the class name alone when the message is {@code null}.
+     */
+    private static final class RedactedThrowable extends Exception
+    {
+        private static final long serialVersionUID = 1L;
+
+        private final String originalClassName;
+
+        private RedactedThrowable(String originalClassName, String message)
+        {
+            super(message);
+            this.originalClassName = originalClassName;
+        }
+
+        @Override
+        public String toString()
+        {
+            String message = getLocalizedMessage();
+            return message == null ? originalClassName : originalClassName + ": " + message;
+        }
+    }
 
     /** One collected log event: level, logger name, formatted message ({@code %m}) and attached throwable. */
     private static final class Entry

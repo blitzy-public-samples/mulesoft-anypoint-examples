@@ -1,5 +1,9 @@
 package com.mulesoft.examples.using_transactional_scope_in_jms_to_database.config;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
+
 import jakarta.jms.ConnectionFactory;
 
 import org.apache.activemq.artemis.core.settings.impl.AddressSettings;
@@ -17,7 +21,7 @@ import org.springframework.jms.core.JmsTemplate;
 
 /**
  * JMS configuration of the {@code Active_MQ} connector on Boot's embedded, non-persistent Artemis broker
- * (D-024, D-080).
+ * (D-024, D-080, D-343).
  *
  * <p>Source: the global element
  * {@code <jms:activemq-connector name="Active_MQ" maxRedelivery="2" validateConnections="true"/>}
@@ -73,15 +77,16 @@ public class JmsConfig {
             @DefaultValue("out") String outboundQueue) { }
 
     /**
-     * Session-transacted listener factory for queue {@code in}, concurrency 1 (D-024, D-080).
+     * Session-transacted listener factory for queue {@code in}, concurrency 1 (D-024, D-080, D-343).
      *
      * <p>Source: {@code processingStrategy="synchronous"} [transactions.xml:6] and the inbound endpoint on
      * connector {@code Active_MQ} [transactions.xml:7].
      *
      * <p>Boot's configurer applies the {@code spring.jms.*} settings first. No transaction manager is set on
      * the factory: the container commits the received message when the listener returns and rolls it back when
-     * the listener throws, before the error handler runs. The error handler writes one DEBUG line naming
-     * {@link #CONNECTOR_NAME} and the throwable.
+     * the listener throws, before the error handler runs. The error handler writes one DEBUG entry naming
+     * {@link #CONNECTOR_NAME}, followed by the exception class names and stack frames of the failure and of its
+     * causes, without any exception message (D-338).
      *
      * @param configurer        Boot's listener container factory configurer
      * @param connectionFactory the auto-configured connection factory of the embedded broker
@@ -94,15 +99,41 @@ public class JmsConfig {
         configurer.configure(factory, connectionFactory);
         factory.setSessionTransacted(true);
         factory.setConcurrency("1");
-        factory.setErrorHandler(t -> log.debug(
-                "JMS listener invocation on connector {} failed; the received message was rolled back",
-                CONNECTOR_NAME, t));
+        factory.setErrorHandler(t -> {
+            if (log.isDebugEnabled()) {
+                log.debug("JMS listener invocation on connector {} failed; the received message was rolled back: {}",
+                        CONNECTOR_NAME, messageFreeTrace(t));
+            }
+        });
         return factory;
     }
 
     /**
+     * Renders the class name and stack frames of {@code throwable} and of each of its causes, outermost first,
+     * each cause introduced by {@code Caused by: }, without any exception message; a cause already rendered ends
+     * the chain (D-338).
+     *
+     * @param throwable the failure of the listener invocation
+     * @return one line per class name and per stack frame, separated by the platform line separator
+     */
+    private static String messageFreeTrace(Throwable throwable) {
+        StringBuilder trace = new StringBuilder();
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable current = throwable; current != null && seen.add(current); current = current.getCause()) {
+            if (current != throwable) {
+                trace.append(System.lineSeparator()).append("Caused by: ");
+            }
+            trace.append(current.getClass().getName());
+            for (StackTraceElement frame : current.getStackTrace()) {
+                trace.append(System.lineSeparator()).append("\tat ").append(frame);
+            }
+        }
+        return trace.toString();
+    }
+
+    /**
      * Session-transacted {@link JmsTemplate} on the auto-configured {@link ConnectionFactory}; it replaces
-     * Boot's auto-configured template.
+     * Boot's auto-configured template (D-343).
      *
      * <p>Source: {@code <jms:transaction action="JOIN_IF_POSSIBLE"/>} on the outbound endpoint
      * [transactions.xml:18-20].
@@ -123,7 +154,7 @@ public class JmsConfig {
 
     /**
      * Registers {@code redelivery-delay} {@value #REDELIVERY_DELAY_MS} ms for the address matching
-     * {@link ActiveMqProperties#inboundQueue()} on the embedded broker (D-024).
+     * {@link ActiveMqProperties#inboundQueue()} on the embedded broker (D-024, D-343).
      *
      * <p>Only the redelivery delay is set. Every other address setting of the inbound address, including Boot's
      * {@code #} dead-letter and expiry addresses and the default {@code max-delivery-attempts} of 10, is

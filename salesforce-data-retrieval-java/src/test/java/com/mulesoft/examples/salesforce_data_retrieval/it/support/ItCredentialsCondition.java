@@ -1,11 +1,17 @@
 package com.mulesoft.examples.salesforce_data_retrieval.it.support;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.extension.ConditionEvaluationResult;
 import org.junit.jupiter.api.extension.ExecutionCondition;
@@ -14,13 +20,18 @@ import org.junit.platform.commons.support.AnnotationSupport;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.SequenceNode;
+import org.yaml.snakeyaml.reader.UnicodeReader;
 
 /**
  * JUnit 5 execution condition behind {@link EnabledIfItCredentials} (D-021).
  *
  * <p>Reads {@code application-it.yml} from the test classpath with SnakeYAML and enables the annotated
- * test class only when the file exists, parses to a YAML map and holds every key named in
- * {@link EnabledIfItCredentials#keys()} with a value that is neither blank nor {@code TODO}. JUnit
+ * test class only when the file exists, holds no recursive alias, parses to a YAML map and holds every key
+ * named in {@link EnabledIfItCredentials#keys()} with a value that is neither blank nor {@code TODO}. JUnit
  * evaluates the condition before any extension builds a Spring application context. Every disabled
  * reason names the file and, where one applies, the failing key; reasons never include file content,
  * and nothing is logged.
@@ -61,8 +72,8 @@ public class ItCredentialsCondition implements ExecutionCondition {
      *
      * @param keys dotted property names, for example {@code sfdc.username} (key names per D-015)
      * @return {@code true} when the classpath {@code application-it.yml} holds every key with a non-blank,
-     *         non-{@code TODO} value; {@code false} when the file is absent, cannot be read or parsed, is
-     *         not a YAML map, or any key is missing, blank or {@code TODO}
+     *         non-{@code TODO} value; {@code false} when the file is absent, cannot be read or parsed, holds
+     *         a recursive alias, is not a YAML map, or any key is missing, blank or {@code TODO}
      */
     public static boolean credentialsPresent(String... keys) {
         return !evaluate(classpathResource(), keys).isDisabled();
@@ -74,8 +85,13 @@ public class ItCredentialsCondition implements ExecutionCondition {
      * <p>Checks run in this order, and the first failure decides the result:
      * <ol>
      *   <li>{@code yamlOrNull} is {@code null}: the file is not on the test classpath;</li>
-     *   <li>the document cannot be opened or read, or loading it raises a {@link YAMLException} or any
-     *       other runtime exception: the file could not be parsed;</li>
+     *   <li>the document cannot be opened or read, or composing it into SnakeYAML's node graph raises a
+     *       {@link YAMLException} or any other runtime exception: the file could not be parsed;</li>
+     *   <li>the node graph holds a recursive alias, an alias to a mapping or a sequence from inside that
+     *       same mapping or sequence: the file contains a recursive alias, and no value is constructed
+     *       (D-353);</li>
+     *   <li>constructing the document's values raises a {@link YAMLException} or any other runtime
+     *       exception: the file could not be parsed;</li>
      *   <li>the loaded document is not a YAML map, an empty document included;</li>
      *   <li>for each key in the given order: the key is missing; its value is {@code null} or its
      *       {@link String#valueOf(Object)} form is blank after trimming; or that trimmed form is exactly
@@ -85,7 +101,7 @@ public class ItCredentialsCondition implements ExecutionCondition {
      * {@code sfdc.username: u} both satisfy the key {@code sfdc.username}; keys are matched exactly and
      * case-sensitively. A value that is not a map, a sequence or a set included, is kept unchanged under its
      * dotted key and checked through its {@link String#valueOf(Object)} form. With no keys, only the first
-     * three checks apply. The stream opened on {@code yamlOrNull} is closed before this
+     * five checks apply. The stream opened on {@code yamlOrNull} is closed before this
      * method returns. Reasons name the file and the failing key and never include file content.
      *
      * @param yamlOrNull location of the YAML document, or {@code null} when the file is absent
@@ -99,7 +115,13 @@ public class ItCredentialsCondition implements ExecutionCondition {
         }
         Object document;
         try (InputStream stream = yamlOrNull.openStream()) {
-            document = new Yaml(new LoaderOptions()).load(stream);
+            byte[] bytes = stream.readAllBytes();
+            Yaml yaml = new Yaml(new LoaderOptions());
+            Node node = yaml.compose(new UnicodeReader(new ByteArrayInputStream(bytes)));
+            if (node != null && isRecursive(node)) {
+                return ConditionEvaluationResult.disabled(RESOURCE + " contains a recursive alias (D-021)");
+            }
+            document = yaml.load(new ByteArrayInputStream(bytes));
         } catch (IOException | RuntimeException e) {
             return ConditionEvaluationResult.disabled(RESOURCE + " could not be parsed (D-021)");
         }
@@ -164,5 +186,42 @@ public class ItCredentialsCondition implements ExecutionCondition {
                 target.put(key, value);
             }
         }
+    }
+
+    /**
+     * Reports whether a composed YAML node graph holds a recursive alias (D-353).
+     *
+     * <p>Every node reachable from {@code root} through mapping keys, mapping values and sequence items is
+     * visited once, iteratively and by identity. A node that SnakeYAML's composer marks for two-step
+     * construction is the target of an alias from inside that same mapping or sequence, and makes the
+     * graph recursive.
+     *
+     * @param root the composed document node
+     * @return {@code true} when any reachable node is the target of a recursive alias
+     */
+    private static boolean isRecursive(Node root) {
+        Set<Node> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        Deque<Node> pending = new ArrayDeque<>();
+        pending.push(root);
+        while (!pending.isEmpty()) {
+            Node node = pending.pop();
+            if (node.isTwoStepsConstruction()) {
+                return true;
+            }
+            if (!visited.add(node)) {
+                continue;
+            }
+            if (node instanceof MappingNode mapping) {
+                for (NodeTuple tuple : mapping.getValue()) {
+                    pending.push(tuple.getKeyNode());
+                    pending.push(tuple.getValueNode());
+                }
+            } else if (node instanceof SequenceNode sequence) {
+                for (Node item : sequence.getValue()) {
+                    pending.push(item);
+                }
+            }
+        }
+        return false;
     }
 }

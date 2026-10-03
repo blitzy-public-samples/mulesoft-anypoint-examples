@@ -415,15 +415,21 @@
       text-decoration-thickness: 2px;
     }
 
-    .method-button:hover,
-    .try-it-send:hover {
+    .method-button:enabled:hover,
+    .try-it-send:enabled:hover {
       filter: brightness(0.9);
     }
   }
 
-  .method-button:active,
-  .try-it-send:active {
+  .method-button:enabled:active,
+  .try-it-send:enabled:active {
     filter: brightness(0.8);
+  }
+
+  .method-button:disabled,
+  .try-it-send:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
   }
 
   @media (prefers-reduced-motion: no-preference) {

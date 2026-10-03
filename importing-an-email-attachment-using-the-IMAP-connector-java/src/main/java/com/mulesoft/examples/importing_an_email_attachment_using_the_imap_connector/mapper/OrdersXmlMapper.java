@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 /**
  * Maps the CSV attachment text to the orders XML document of DW-13
  * [importing-an-email-attachment-using-the-IMAP-connector/src/main/app/imap-to-xml.xml:17-29]
- * (D-034, D-063, D-215, D-216).
+ * (D-034, D-063, D-215, D-216, D-360).
  *
  * <p>Input: CSV text whose first record is the header {@code orderId,name,units,pricePerUnit}.
  * Output: one {@code <order>} element per CSV record, in input order, inside a single
@@ -71,6 +71,9 @@ public class OrdersXmlMapper {
     /** Indent of a field element inside an {@code <order>}. */
     private static final String FIELD_INDENT = "    ";
 
+    /** Message of the exception raised for a written value holding a code point XML 1.0 does not allow. */
+    private static final String INVALID_TEXT = "CSV value holds a character that XML 1.0 does not allow";
+
     /**
      * Maps CSV order records to the orders XML document of DW-13
      * [importing-an-email-attachment-using-the-IMAP-connector/src/main/app/imap-to-xml.xml:17-29],
@@ -81,9 +84,14 @@ public class OrdersXmlMapper {
      * {@code name}, {@code units} and {@code pricePerUnit}, in that order, each on its own line.
      * Values are copied as the text read from the CSV, with no number conversion: {@code 2.0}
      * stays {@code 2.0}. Text has {@code &}, {@code <} and {@code >} escaped as {@code &amp;},
-     * {@code &lt;} and {@code &gt;}; quotes are written unchanged. An empty value, a column the
-     * header lacks and a column a short record lacks are each written as a self-closed element
-     * such as {@code <units/>}. Columns other than the four are not written.
+     * {@code &lt;} and {@code &gt;}; every other character XML 1.0 allows (U+0009, U+000A,
+     * U+000D, U+0020 to U+D7FF, U+E000 to U+FFFD and U+10000 to U+10FFFF, a surrogate pair
+     * counting as one character), quotes, tab, LF and CR included, is written unchanged. A written
+     * value holding any other code point, for example U+0000, U+FFFE or a surrogate that is not
+     * part of a pair, raises an {@link IllegalArgumentException} whose message does not repeat the
+     * value (D-360). An empty value, a column the header lacks and a column a short record lacks
+     * are each written as a self-closed element such as {@code <units/>}. Columns other than the
+     * four are not written and not checked.
      *
      * <p>The document starts with {@code <?xml version='1.0' encoding='UTF-8'?>}, indents two
      * spaces per level, joins lines with {@code \n} and has no trailing newline. Text with no
@@ -94,7 +102,9 @@ public class OrdersXmlMapper {
      * @param csv the CSV attachment text; its first record is the header
      * @return the orders XML document
      * @throws NullPointerException if {@code csv} is {@code null}
-     * @throws IllegalArgumentException if the header has an empty column name
+     * @throws IllegalArgumentException if the header has an empty column name, or with the message
+     *     {@code CSV value holds a character that XML 1.0 does not allow} if a written value holds a
+     *     code point XML 1.0 does not allow
      * @throws UncheckedIOException if the CSV text is malformed, such as a quoted value that is
      *     never closed
      */
@@ -169,12 +179,40 @@ public class OrdersXmlMapper {
     }
 
     /**
-     * Escapes {@code &}, {@code <} and {@code >} in element text.
+     * Checks that every code point of the element text is one XML 1.0 allows, then escapes
+     * {@code &}, {@code <} and {@code >}; every other character is returned unchanged (D-360).
      *
      * @param text the raw text
      * @return the escaped text
+     * @throws IllegalArgumentException if the text holds a code point XML 1.0 does not allow, an
+     *     unpaired surrogate included
      */
     private static String escapeText(String text) {
+        int index = 0;
+        while (index < text.length()) {
+            int codePoint = text.codePointAt(index);
+            if (!isXmlChar(codePoint)) {
+                throw new IllegalArgumentException(INVALID_TEXT);
+            }
+            index += Character.charCount(codePoint);
+        }
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    /**
+     * Tells whether a code point belongs to the XML 1.0 {@code Char} production: U+0009, U+000A,
+     * U+000D, U+0020 to U+D7FF, U+E000 to U+FFFD and U+10000 to U+10FFFF. A surrogate code unit
+     * read on its own, U+D800 to U+DFFF, does not.
+     *
+     * @param codePoint the code point
+     * @return {@code true} when XML 1.0 allows the code point in text
+     */
+    private static boolean isXmlChar(int codePoint) {
+        return codePoint == 0x9
+                || codePoint == 0xA
+                || codePoint == 0xD
+                || (codePoint >= 0x20 && codePoint <= 0xD7FF)
+                || (codePoint >= 0xE000 && codePoint <= 0xFFFD)
+                || (codePoint >= 0x10000 && codePoint <= 0x10FFFF);
     }
 }

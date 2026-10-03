@@ -1,5 +1,9 @@
 package com.mulesoft.examples.xml_only_soap_webservice.exception;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -10,7 +14,8 @@ import org.springframework.ws.soap.SoapMessage;
 
 /**
  * Answers every exception raised while dispatching a SOAP request to {@code /AdmissionService},
- * {@code /PatientService} or {@code /EHRService} with a SOAP 1.1 Server fault, and logs the exception at ERROR.
+ * {@code /PatientService} or {@code /EHRService} with a SOAP 1.1 Server fault, and logs one ERROR entry naming the
+ * class and stack frames of the exception and of each of its causes, with no exception message (D-338).
  *
  * <p>The fault's {@code faultstring} is the exception's message, or the exception's string form
  * ({@link Exception#toString()}) when the message is null or empty. The {@code faultstring} element carries no
@@ -37,12 +42,17 @@ public class SoapFaultMappingExceptionResolver implements EndpointExceptionResol
     private static final Logger LOG = LoggerFactory.getLogger(SoapFaultMappingExceptionResolver.class);
 
     /**
-     * Writes a SOAP 1.1 Server fault for the exception into the response of the message context and logs the
-     * exception once at ERROR with its stack trace.
+     * Writes a SOAP 1.1 Server fault for the exception into the response of the message context and logs one ERROR
+     * entry naming the class and stack frames of the exception and of each of its causes, with no exception message
+     * (D-338).
      *
      * <p>The fault string is {@code ex.getMessage()}, or {@code ex.toString()} when the message is null or empty;
      * the cause chain is not read. The fault replaces any content already written to the response body, and the
      * fault string has no language attribute.
+     *
+     * <p>The log entry is {@code SOAP request failed: } followed by the exception's class name and stack frames,
+     * then, for each cause, {@code Caused by: } with the cause's class name and stack frames. It carries no
+     * exception message and no throwable argument (D-338).
      *
      * @param messageContext the context of the request being dispatched; its response is a {@link SoapMessage}
      * @param endpoint       the endpoint that was executing, or {@code null} when no endpoint was mapped
@@ -53,9 +63,32 @@ public class SoapFaultMappingExceptionResolver implements EndpointExceptionResol
     public boolean resolveException(MessageContext messageContext, Object endpoint, Exception ex) {
         String message = ex.getMessage();
         String faultString = (message == null || message.isEmpty()) ? ex.toString() : message;
-        LOG.error("SOAP request failed: {}", faultString, ex);
+        LOG.error("SOAP request failed: {}", messageFreeTrace(ex));
         ((SoapMessage) messageContext.getResponse()).getSoapBody().addServerOrReceiverFault(faultString, null);
         return true;
+    }
+
+    /**
+     * Renders the class name and stack frames of the throwable and of each of its causes, outermost first, each
+     * cause introduced by {@code Caused by: }, without any exception message. A cause already rendered ends the
+     * chain (D-338).
+     *
+     * @param throwable the exception to render
+     * @return the class names and stack frames, one per line
+     */
+    private static String messageFreeTrace(Throwable throwable) {
+        StringBuilder trace = new StringBuilder();
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable current = throwable; current != null && seen.add(current); current = current.getCause()) {
+            if (current != throwable) {
+                trace.append(System.lineSeparator()).append("Caused by: ");
+            }
+            trace.append(current.getClass().getName());
+            for (StackTraceElement frame : current.getStackTrace()) {
+                trace.append(System.lineSeparator()).append("\tat ").append(frame);
+            }
+        }
+        return trace.toString();
     }
 
     /**

@@ -7,10 +7,13 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.extension.ConditionEvaluationResult;
 import org.junit.jupiter.api.extension.ExecutionCondition;
@@ -20,7 +23,10 @@ import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.error.MarkedYAMLException;
-import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.SequenceNode;
 
 /**
  * Enables a test class that carries {@link EnabledIfItCredentials} only when {@code application-it.yml}
@@ -69,14 +75,21 @@ public final class ItCredentialsCondition implements ExecutionCondition {
     /**
      * Checks a YAML resource on the given class loader against the required keys.
      *
-     * <p>Every document of the resource is parsed with SnakeYAML's {@link SafeConstructor}, and documents
-     * that are not mappings are ignored. The first failing check decides the result, and no reason
-     * contains a value:
+     * <p>The documents of the resource are composed into SnakeYAML nodes one at a time, in order; each is
+     * checked for a recursive alias and then constructed with SnakeYAML's {@link SafeConstructor}, and
+     * documents that are not mappings are ignored. Reading stops at the first document that cannot be
+     * read, composed or constructed, or that holds a recursive alias. The first failing check decides the
+     * result, and no reason contains a value, a tag, an alias name or SnakeYAML's problem text (D-012,
+     * D-369):
      * <ol>
      *   <li>the resource is absent: {@code <resource> not found on the test classpath};</li>
-     *   <li>the resource cannot be read or parsed: {@code <resource> could not be parsed: <detail>}, where
-     *       the detail is the parser's problem with its 1-based line and column, or the simple class name
-     *       of the exception when it marks no problem;</li>
+     *   <li>the resource cannot be read, composed or constructed, an invalid {@code !!int} or
+     *       {@code !!float} scalar included: {@code <resource> could not be parsed: <detail>}, where the
+     *       detail is the simple class name of the exception, followed by
+     *       {@code at line <line>, column <column>} with the 1-based position of the problem when
+     *       SnakeYAML marks one;</li>
+     *   <li>a document holds an alias that refers to a mapping or sequence containing that alias:
+     *       {@code <resource> holds a recursive alias}, and that document is not constructed;</li>
      *   <li>for each key in the given order, with its value taken from the first document that holds
      *       one: {@code <resource>: <key> is missing} when there is no value or the value is a mapping or
      *       a collection, {@code <resource>: <key> is blank} when its trimmed string form is empty, and
@@ -105,13 +118,18 @@ public final class ItCredentialsCondition implements ExecutionCondition {
         }
         List<Map<?, ?>> documents = new ArrayList<>();
         try (Reader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
-            Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
-            for (Object document : yaml.loadAll(reader)) {
-                if (document instanceof Map<?, ?> mapping) {
+            DocumentConstructor constructor = new DocumentConstructor();
+            for (Node node : new Yaml(constructor).composeAll(reader)) {
+                Set<Node> path = Collections.newSetFromMap(new IdentityHashMap<>());
+                Set<Node> checked = Collections.newSetFromMap(new IdentityHashMap<>());
+                if (isRecursive(node, path, checked)) {
+                    return ConditionEvaluationResult.disabled(resourceName + " holds a recursive alias");
+                }
+                if (constructor.construct(node) instanceof Map<?, ?> mapping) {
                     documents.add(mapping);
                 }
             }
-        } catch (YAMLException | IOException e) {
+        } catch (RuntimeException | IOException e) {
             return ConditionEvaluationResult.disabled(resourceName + " could not be parsed: " + describe(e));
         }
         for (String key : keys) {
@@ -173,21 +191,80 @@ public final class ItCredentialsCondition implements ExecutionCondition {
     }
 
     /**
-     * Describes a read or parse failure without quoting the resource's content.
+     * Reports whether a composed node reaches itself, which an alias to an enclosing mapping or sequence
+     * produces. The search follows the key and value nodes of each mapping and the items of each sequence,
+     * and visits every node once.
      *
-     * @param failure the exception raised while reading or parsing the resource
-     * @return the marked problem with its 1-based line and column when SnakeYAML marks one, otherwise the
-     *         exception's simple class name
+     * @param node    the node to search from
+     * @param path    the nodes on the current search path, compared by identity
+     * @param checked the nodes already searched without finding a cycle, compared by identity
+     * @return {@code true} when a node on the path is reached again; {@code false} otherwise
+     */
+    private static boolean isRecursive(Node node, Set<Node> path, Set<Node> checked) {
+        if (checked.contains(node)) {
+            return false;
+        }
+        if (!path.add(node)) {
+            return true;
+        }
+        List<Node> children = new ArrayList<>();
+        if (node instanceof MappingNode mapping) {
+            for (NodeTuple tuple : mapping.getValue()) {
+                children.add(tuple.getKeyNode());
+                children.add(tuple.getValueNode());
+            }
+        } else if (node instanceof SequenceNode sequence) {
+            children.addAll(sequence.getValue());
+        }
+        for (Node child : children) {
+            if (isRecursive(child, path, checked)) {
+                return true;
+            }
+        }
+        path.remove(node);
+        checked.add(node);
+        return false;
+    }
+
+    /**
+     * Describes a read or parse failure without quoting the resource's content, SnakeYAML's problem text
+     * or the exception's message (D-012, D-369).
+     *
+     * @param failure the exception raised while reading, composing or constructing the resource
+     * @return the exception's simple class name, followed by {@code at line <line>, column <column>} with
+     *         the 1-based position of the problem when the exception is a {@link MarkedYAMLException} that
+     *         marks one
      */
     private static String describe(Exception failure) {
-        if (failure instanceof MarkedYAMLException marked && marked.getProblem() != null) {
-            if (marked.getProblemMark() == null) {
-                return marked.getProblem();
-            }
-            return marked.getProblem()
+        String type = failure.getClass().getSimpleName();
+        if (failure instanceof MarkedYAMLException marked && marked.getProblemMark() != null) {
+            return type
                     + " at line " + (marked.getProblemMark().getLine() + 1)
                     + ", column " + (marked.getProblemMark().getColumn() + 1);
         }
-        return failure.getClass().getSimpleName();
+        return type;
+    }
+
+    /**
+     * {@link SafeConstructor} with default {@link LoaderOptions} that constructs one composed document at
+     * a time.
+     */
+    private static final class DocumentConstructor extends SafeConstructor {
+
+        /** Creates the constructor with default {@link LoaderOptions}. */
+        DocumentConstructor() {
+            super(new LoaderOptions());
+        }
+
+        /**
+         * Constructs the Java objects of one composed document with {@link SafeConstructor}'s standard
+         * tags.
+         *
+         * @param document the root node of the document
+         * @return the document's value: a mapping, a sequence, a scalar or {@code null}
+         */
+        Object construct(Node document) {
+            return constructDocument(document);
+        }
     }
 }

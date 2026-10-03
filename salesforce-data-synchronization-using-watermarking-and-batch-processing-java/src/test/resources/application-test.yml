@@ -1,0 +1,11 @@
+polling:
+  enabled: false
+watermark:
+  store-dir: target/test-watermark
+sfdc:
+  user: test-user@example.com
+  password: test-password
+  securityToken: test-token
+  key: test-key
+  secret: test-secret
+  login-url: http://localhost:1  # overridden per test with a MockWebServer URL

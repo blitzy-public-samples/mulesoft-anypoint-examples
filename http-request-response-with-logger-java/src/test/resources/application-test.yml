@@ -1,4 +1,1 @@
-# Test profile: no in-JVM test actor needs values in this project; the startup banner is off (D-012, D-310).
-spring:
-  main:
-    banner-mode: off
+# Test profile: no in-JVM test actor needs values in this project (D-012, D-346).

@@ -1,11 +1,17 @@
 package com.mulesoft.examples.import_leads_into_salesforce.it.support;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.AnnotatedElement;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.extension.ConditionEvaluationResult;
 import org.junit.jupiter.api.extension.ExecutionCondition;
@@ -14,12 +20,17 @@ import org.junit.platform.commons.support.AnnotationSupport;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
-import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.SequenceNode;
+import org.yaml.snakeyaml.reader.UnicodeReader;
 
 /**
  * Disables a test class annotated with {@link EnabledIfItCredentials} unless {@code application-it.yml} on
  * the test classpath supplies every listed key with a value that is neither blank nor {@code TODO}. Keys
- * resolve in nested-map or flat dotted form. See D-021.
+ * resolve in nested-map or flat dotted form. A file with a mapping key that holds a recursive alias disables
+ * the class before any value is constructed. See D-021, D-353 and D-372.
  */
 public class ItCredentialsCondition implements ExecutionCondition {
 
@@ -50,12 +61,20 @@ public class ItCredentialsCondition implements ExecutionCondition {
      * Evaluates {@link EnabledIfItCredentials} for the current test class or method.
      *
      * <p>The annotation is looked up on the context's element and, when absent there, on its test class;
-     * without it the element is enabled. Otherwise {@value #RESOURCE} is loaded with SnakeYAML's
-     * {@link SafeConstructor} and the annotation's keys are checked in declared order. The first key that
-     * resolves to nothing, {@code null}, a mapping or a sequence, to a blank value, or to the trimmed value
-     * {@code TODO} disables the element with a reason naming that key; non-string values are compared
-     * through {@link String#valueOf(Object)}. A missing or unreadable file disables the element. A document
-     * that is empty or whose root is not a mapping supplies no key. This method never throws.
+     * without it the element is enabled. Otherwise {@value #RESOURCE} is read in full and composed into
+     * SnakeYAML's node graph. When a key of any mapping in that graph reaches, through its keys, values and
+     * items, a mapping or a sequence that contains an alias to itself, as in {@code ? [&m {x: *m}] : v}, the
+     * element is disabled with a reason naming only the file and no value is constructed (D-372); a
+     * recursive alias reachable only from mapping values and sequence items leaves the file to the checks
+     * below. The file is then loaded with SnakeYAML's {@link SafeConstructor} and the annotation's keys are
+     * checked in declared order. The first key that resolves to nothing, {@code null}, a mapping or a
+     * sequence, to a blank value, or to the trimmed value {@code TODO} disables the element with a reason
+     * naming that key; non-string values are compared through {@link String#valueOf(Object)}. A missing,
+     * unreadable or unparseable file disables the element; a file counts as unparseable when SnakeYAML raises
+     * any runtime exception while composing or loading it, an explicitly typed scalar that does not convert
+     * to its type included (D-353). A document that is empty or whose root is not a mapping supplies no key.
+     * Reasons name the file and, where one applies, the key, and never include file content or an exception
+     * message. This method throws no exception.
      *
      * @param context the extension context of the test class or method being evaluated
      * @return enabled when the annotation is absent or every listed key holds a usable value; disabled with
@@ -76,10 +95,19 @@ public class ItCredentialsCondition implements ExecutionCondition {
             if (stream == null) {
                 return ConditionEvaluationResult.disabled(RESOURCE + " not found on the test classpath (D-021)");
             }
-            Object document = new Yaml(new SafeConstructor(new LoaderOptions())).load(stream);
+            byte[] bytes = stream.readAllBytes();
+            Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
+            Node node = yaml.compose(new UnicodeReader(new ByteArrayInputStream(bytes)));
+            if (node != null && hasRecursiveKey(node)) {
+                return ConditionEvaluationResult.disabled(
+                        RESOURCE + " contains a recursive alias in a mapping key (D-021)");
+            }
+            Object document = yaml.load(new ByteArrayInputStream(bytes));
             root = document instanceof Map<?, ?> map ? map : Map.of();
-        } catch (YAMLException | IOException e) {
-            return ConditionEvaluationResult.disabled(RESOURCE + " could not be read: " + e.getMessage());
+        } catch (IOException e) {
+            return ConditionEvaluationResult.disabled(RESOURCE + " could not be read (D-021)");
+        } catch (RuntimeException e) {
+            return ConditionEvaluationResult.disabled(RESOURCE + " could not be parsed (D-021)");
         }
         for (String key : keys) {
             Object value = resolve(root, key);
@@ -149,5 +177,65 @@ public class ItCredentialsCondition implements ExecutionCondition {
             }
         }
         return null;
+    }
+
+    /**
+     * Reports whether a key of a mapping in a composed YAML node graph reaches a recursive alias
+     * (D-372).
+     *
+     * <p>The walk is iterative and compares nodes by identity. It first visits each node reachable from
+     * {@code root} through mapping values and sequence items once and collects the key node of every entry
+     * of each visited mapping. It then visits each node reachable from those key nodes through mapping keys,
+     * mapping values and sequence items once. A node that SnakeYAML's composer marks for two-step
+     * construction contains an alias to itself; reaching one in the second walk makes the result
+     * {@code true}.
+     *
+     * @param root the composed document node
+     * @return {@code true} when a mapping key reaches a mapping or a sequence that contains an alias to
+     *         itself; {@code false} otherwise, a recursive alias reachable only from mapping values and
+     *         sequence items included
+     */
+    private static boolean hasRecursiveKey(Node root) {
+        Set<Node> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        Deque<Node> pending = new ArrayDeque<>();
+        Deque<Node> keyReachable = new ArrayDeque<>();
+        pending.push(root);
+        while (!pending.isEmpty()) {
+            Node node = pending.pop();
+            if (!visited.add(node)) {
+                continue;
+            }
+            if (node instanceof MappingNode mapping) {
+                for (NodeTuple tuple : mapping.getValue()) {
+                    keyReachable.push(tuple.getKeyNode());
+                    pending.push(tuple.getValueNode());
+                }
+            } else if (node instanceof SequenceNode sequence) {
+                for (Node item : sequence.getValue()) {
+                    pending.push(item);
+                }
+            }
+        }
+        Set<Node> reached = Collections.newSetFromMap(new IdentityHashMap<>());
+        while (!keyReachable.isEmpty()) {
+            Node node = keyReachable.pop();
+            if (node.isTwoStepsConstruction()) {
+                return true;
+            }
+            if (!reached.add(node)) {
+                continue;
+            }
+            if (node instanceof MappingNode mapping) {
+                for (NodeTuple tuple : mapping.getValue()) {
+                    keyReachable.push(tuple.getKeyNode());
+                    keyReachable.push(tuple.getValueNode());
+                }
+            } else if (node instanceof SequenceNode sequence) {
+                for (Node item : sequence.getValue()) {
+                    keyReachable.push(item);
+                }
+            }
+        }
+        return false;
     }
 }

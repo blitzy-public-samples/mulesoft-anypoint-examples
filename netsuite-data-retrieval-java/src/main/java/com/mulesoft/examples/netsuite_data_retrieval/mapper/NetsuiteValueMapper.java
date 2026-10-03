@@ -113,6 +113,12 @@ public class NetsuiteValueMapper {
     /** REST key of a reference's or an enumeration's display name. */
     private static final String REST_REF_NAME = "refName";
 
+    /**
+     * Most characters of one REST text that an unmapped-enumeration WARN entry carries (FB-NS-04,
+     * D-348).
+     */
+    private static final int LOGGED_TEXT_MAX = 64;
+
     private final ZoneId zone;
 
     /**
@@ -352,7 +358,10 @@ public class NetsuiteValueMapper {
      * STAGE and CREDIT_HOLD_OVERRIDE: the {@code id} and then the {@code refName} of an object value,
      * or the text of a textual value, each compared with the candidates ignoring case; the first match
      * is written as the upper-case candidate. With no match the key is omitted and a WARN entry
-     * names the key and the REST value (FB-NS-04, D-294).
+     * names the key and the REST value as {@link #describeEnumerationValue(JsonNode)} gives it: the
+     * bounded {@code id} of an object, the length or JSON type of its {@code refName} without its
+     * text, and the count of its other members; the bounded text of a textual value; or the JSON type
+     * of any other value (FB-NS-04, D-294, D-348).
      */
     private static Optional<FieldWriter> enumeration(String key, JsonNode value, List<String> candidates) {
         List<String> restValues = new ArrayList<>(2);
@@ -370,8 +379,131 @@ public class NetsuiteValueMapper {
                 }
             }
         }
-        log.warn("Unmapped NetSuite enumeration value for {}: {}", key, value);
+        log.warn("Unmapped NetSuite enumeration value for {}: {}", key, describeEnumerationValue(value));
         return Optional.empty();
+    }
+
+    /**
+     * Describes a REST enumeration value for the unmapped-enumeration WARN entry (FB-NS-04, D-348).
+     *
+     * <ul>
+     *   <li>An object: {@code object {id=<id>, refName=<refName>, <n> other members}}, where
+     *       {@code <id>} is described by {@link #describeEnumerationId(JsonNode)}, {@code <refName>}
+     *       by {@link #describeEnumerationRefName(JsonNode)} without any of its characters, and
+     *       {@code <n>} counts the members other than {@code id} and {@code refName} and reads
+     *       {@code 1 other member} for one; no other member's name or value is included.</li>
+     *   <li>A textual value: {@code text "<text>"}, the text bounded by {@link #loggedText(String)}.</li>
+     *   <li>Any other value: its {@link JsonNode#getNodeType() node type} alone, e.g. {@code ARRAY} or
+     *       {@code NUMBER}.</li>
+     * </ul>
+     *
+     * <p>Examples: {@code {"id": "_partner", "refName": "Partner", "accessToken": "t", "email": "e"}}
+     * gives {@code object {id="_partner", refName=<redacted, 7 chars>, 2 other members}};
+     * {@code {"id": 12, "refName": null}} gives {@code object {id=12, refName=NULL, 0 other members}};
+     * {@code "Partner"} gives {@code text "Partner"}.
+     *
+     * @param value the REST value of a STAGE or CREDIT_HOLD_OVERRIDE key
+     * @return the single-line description
+     */
+    private static String describeEnumerationValue(JsonNode value) {
+        if (value.isObject()) {
+            int others = 0;
+            Iterator<String> names = value.fieldNames();
+            while (names.hasNext()) {
+                String name = names.next();
+                if (!REST_ID.equals(name) && !REST_REF_NAME.equals(name)) {
+                    others++;
+                }
+            }
+            return "object {" + REST_ID + "=" + describeEnumerationId(value.get(REST_ID))
+                    + ", " + REST_REF_NAME + "=" + describeEnumerationRefName(value.get(REST_REF_NAME))
+                    + ", " + others + (others == 1 ? " other member}" : " other members}");
+        }
+        if (value.isTextual()) {
+            return "text \"" + loggedText(value.textValue()) + "\"";
+        }
+        return value.getNodeType().name();
+    }
+
+    /**
+     * Describes the {@code id} member of a REST enumeration object (D-348): a textual member as
+     * {@code "<text>"} and a number or boolean member as its text, both bounded by
+     * {@link #loggedText(String)}; an absent member as {@code absent}; any other member, JSON
+     * {@code null} included, as its {@link JsonNode#getNodeType() node type} alone.
+     *
+     * <p>Examples: {@code "_partner"} gives {@code "_partner"}, {@code 12} gives {@code 12}, an
+     * object gives {@code OBJECT}.
+     *
+     * @param id the member value, or {@code null} when the object has no {@code id}
+     * @return the single-line description
+     */
+    private static String describeEnumerationId(JsonNode id) {
+        if (id == null || id.isMissingNode()) {
+            return "absent";
+        }
+        if (id.isTextual()) {
+            return "\"" + loggedText(id.textValue()) + "\"";
+        }
+        if (id.isNumber() || id.isBoolean()) {
+            return loggedText(id.asText());
+        }
+        return id.getNodeType().name();
+    }
+
+    /**
+     * Describes the {@code refName} member of a REST enumeration object without any of its
+     * characters (D-348): a textual member as {@code <redacted, <length> chars>}, the length being
+     * {@link String#length()} of the whole text; an absent member as {@code absent}; any other
+     * member, JSON {@code null}, number, boolean, object or array, as its
+     * {@link JsonNode#getNodeType() node type} alone.
+     *
+     * <p>Examples: {@code "Partner"} gives {@code <redacted, 7 chars>}, {@code ""} gives
+     * {@code <redacted, 0 chars>}, {@code 3} gives {@code NUMBER}, {@code null} gives {@code NULL}.
+     *
+     * @param refName the member value, or {@code null} when the object has no {@code refName}
+     * @return the single-line description
+     */
+    private static String describeEnumerationRefName(JsonNode refName) {
+        if (refName == null || refName.isMissingNode()) {
+            return "absent";
+        }
+        if (refName.isTextual()) {
+            return "<redacted, " + refName.textValue().length() + " chars>";
+        }
+        return refName.getNodeType().name();
+    }
+
+    /**
+     * Returns {@code text} bounded for one log line (D-348): every ISO control character (such as
+     * CR, LF and tab) and every Unicode line or paragraph separator is replaced by {@code ?}; text
+     * longer than {@link #LOGGED_TEXT_MAX} characters is cut to that length, or one less where the
+     * cut would split a surrogate pair, and followed by {@code ...(<length> chars)} with the
+     * original length.
+     *
+     * <p>Example: a 500-character text gives its first 64 characters followed by
+     * {@code ...(500 chars)}.
+     *
+     * @param text the REST text
+     * @return the bounded text
+     */
+    private static String loggedText(String text) {
+        int end = text.length();
+        if (end > LOGGED_TEXT_MAX) {
+            end = Character.isHighSurrogate(text.charAt(LOGGED_TEXT_MAX - 1)) ? LOGGED_TEXT_MAX - 1 : LOGGED_TEXT_MAX;
+        }
+        StringBuilder out = new StringBuilder(end + 20);
+        for (int i = 0; i < end; i++) {
+            char c = text.charAt(i);
+            int category = Character.getType(c);
+            boolean replaced = Character.isISOControl(c)
+                    || category == Character.LINE_SEPARATOR
+                    || category == Character.PARAGRAPH_SEPARATOR;
+            out.append(replaced ? '?' : c);
+        }
+        if (end < text.length()) {
+            out.append("...(").append(text.length()).append(" chars)");
+        }
+        return out.toString();
     }
 
     /**

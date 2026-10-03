@@ -1,0 +1,13 @@
+polling:
+  enabled: false
+sfdc:
+  user: test-user@example.com
+  password: test-password
+  securityToken: test-token
+  key: test-key
+  secret: test-secret
+  login-url: http://localhost:0
+file:
+  inbound:
+    path: target/test-input
+    move-to-directory: target/test-output

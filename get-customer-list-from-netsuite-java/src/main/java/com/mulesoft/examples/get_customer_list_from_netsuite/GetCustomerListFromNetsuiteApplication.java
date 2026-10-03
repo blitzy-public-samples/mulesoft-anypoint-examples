@@ -15,7 +15,7 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
  * registers every {@code @ConfigurationProperties} type in the same packages. Spring Security's
  * servlet auto-configuration and Boot's OAuth2 client auto-configuration are excluded: the
  * application has no security filter chain, no generated user and no property-bound client
- * registration.
+ * registration (D-345).
  */
 @SpringBootApplication(exclude = {
         SecurityAutoConfiguration.class,

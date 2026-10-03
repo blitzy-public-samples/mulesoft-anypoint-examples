@@ -1,0 +1,7 @@
+sfdc:
+  username: user@example.com
+  password: test-password
+  securityToken: test-token
+  key: test-key
+  secret: test-secret
+  login-url: http://localhost:0

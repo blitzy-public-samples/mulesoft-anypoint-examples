@@ -1,0 +1,9 @@
+wday:
+  hostname: TODO  # TODO: supply the Workday web-services host name
+  tenant: TODO  # TODO: supply the Workday tenant name
+  user: TODO  # TODO: supply the Workday integration user name
+  password: TODO  # TODO: supply the Workday integration user password
+  status:
+    id: TODO  # TODO: supply the WID of the customer status used to inactivate the test customer
+  reason:
+    id: TODO  # TODO: supply the WID of the status-change reason

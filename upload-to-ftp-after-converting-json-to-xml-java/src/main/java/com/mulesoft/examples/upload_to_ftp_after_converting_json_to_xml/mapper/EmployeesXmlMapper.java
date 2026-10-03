@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 /**
  * Converts a JSON employee list to the XML document of DW-34
  * [upload-to-ftp-after-converting-json-to-xml/src/main/app/upload-to-ftp.xml:9-26], implemented by hand in
- * Java (D-034, D-270).
+ * Java (D-034, D-270, D-359).
  *
  * <p>Input: one JSON document whose root is an object; its encoding (UTF-8, UTF-16 or UTF-32) is detected
  * from the bytes. Output: the UTF-8 bytes of the declaration {@code <?xml version='1.0' encoding='UTF-8'?>}
@@ -47,14 +47,22 @@ import org.springframework.stereotype.Component;
  *   <li>any other string, a number in its JSON text (for example {@code 111}, {@code 1.10}, {@code 1e3})
  *       and a boolean ({@code true}, {@code false}) give {@code <k>text</k>} on one line, with {@code &},
  *       {@code <} and {@code >} written as {@code &amp;}, {@code &lt;} and {@code &gt;} and every other
- *       character, quotes and control characters included, unchanged;</li>
+ *       character XML 1.0 allows (U+0009, U+000A, U+000D, U+0020 to U+D7FF, U+E000 to U+FFFD and
+ *       U+10000 to U+10FFFF, a surrogate pair counting as one character), quotes, tab, LF and CR
+ *       included, unchanged (D-359);</li>
  *   <li>an object gives {@code <k>}, its fields one level deeper and {@code </k>}, or {@code <k/>} when
  *       none of its fields writes an element, as for {@code {}};</li>
  *   <li>an array writes each of its items under the same name at the same level: nested arrays flatten,
  *       and an empty array writes nothing.</li>
  * </ul>
  *
- * <p>JSON keys are written verbatim as element names. The input
+ * <p>JSON keys are written verbatim as element names. Each name written must be an XML 1.0 (Fifth
+ * Edition) {@code Name} that is namespace-well-formed in a document declaring no namespace: either a
+ * {@code Name} without {@code :} (an {@code NCName}, such as {@code _a}, {@code a-b.c} or {@code é}), or
+ * {@code xml:} followed by an {@code NCName}, such as {@code xml:lang}. Any other written name, for example
+ * {@code 1bad}, {@code -a}, the empty key, a key holding a space, U+0000 or an unpaired surrogate,
+ * {@code a:b}, {@code xmlns:a}, {@code :a} or {@code a:}, raises an {@link IllegalArgumentException}
+ * (D-359). A key that writes no element, such as one whose value is {@code []}, is not checked. The input
  * {@code {"employees":{"employee":[{"lastName":"Doe","name":"A&B<c>","addresses":{"address":[{}]}}]}}}
  * gives, with tabs as indentation:
  *
@@ -83,8 +91,16 @@ import org.springframework.stereotype.Component;
  *   <li>{@code employees.employee is not an array}: an {@code employee} value that is an object, string,
  *       number or boolean;</li>
  *   <li>{@code addresses.address is not an array}: an {@code address} value that is an object, string,
- *       number or boolean.</li>
+ *       number or boolean;</li>
+ *   <li>{@code JSON key is not a valid XML element name}: a key written as an element name that is not
+ *       one of the names described above;</li>
+ *   <li>{@code JSON string holds a character that XML 1.0 does not allow}: a string written as element
+ *       text that holds a code point outside the characters listed above, for example U+0000, U+FFFE or
+ *       a surrogate that is not part of a pair.</li>
  * </ul>
+ *
+ * <p>The two last checks run while the document is written, on each key and string as it is written;
+ * neither message repeats the input.
  *
  * <p>Instances hold no state; {@link #toXml(byte[])} performs no I/O and is safe for concurrent use.
  */
@@ -93,6 +109,9 @@ public class EmployeesXmlMapper {
 
     /** First line of every document. */
     private static final String XML_DECLARATION = "<?xml version='1.0' encoding='UTF-8'?>";
+
+    /** The one namespace prefix an element name may carry: {@code xml}, bound without a declaration. */
+    private static final String XML_PREFIX = "xml:";
 
     private static final String EMPLOYEES = "employees";
     private static final String EMPLOYEE = "employee";
@@ -107,6 +126,8 @@ public class EmployeesXmlMapper {
     private static final String ROOT_NOT_OBJECT = "JSON root is not an object";
     private static final String EMPLOYEE_NOT_ARRAY = "employees.employee is not an array";
     private static final String ADDRESS_NOT_ARRAY = "addresses.address is not an array";
+    private static final String INVALID_NAME = "JSON key is not a valid XML element name";
+    private static final String INVALID_TEXT = "JSON string holds a character that XML 1.0 does not allow";
 
     /** Items of an absent or {@code null} list. */
     private static final Object[] NO_ITEMS = new Object[0];
@@ -121,8 +142,10 @@ public class EmployeesXmlMapper {
      * @return the UTF-8 bytes of the XML document, ending with {@code </employees>} or
      *     {@code <employees/>} and no line feed
      * @throws IllegalArgumentException with one of the messages listed on this class, when the body is
-     *     empty or not valid JSON, holds more than one root value, has a root that is not an object, or
-     *     holds an {@code employee} or {@code address} value that is neither an array nor {@code null}
+     *     empty or not valid JSON, holds more than one root value, has a root that is not an object,
+     *     holds an {@code employee} or {@code address} value that is neither an array nor {@code null},
+     *     or holds a key written as an element name or a string written as text that XML 1.0 does not
+     *     allow (D-359)
      */
     public byte[] toXml(byte[] json) {
         List<Map.Entry<String, Object>> root = parse(json);
@@ -293,7 +316,8 @@ public class EmployeesXmlMapper {
 
     /**
      * Appends the element {@code key} holding {@code value} at {@code depth} tabs, each line ending with LF.
-     * An array appends one element per item under the same key and depth.
+     * An array appends one element per item under the same key and depth. Before an element is written,
+     * {@code key} is checked as {@link #requireElementName(String)} describes (D-359).
      */
     private static void writeElement(StringBuilder xml, String key, Object value, int depth) {
         if (value instanceof Object[]) {
@@ -302,6 +326,7 @@ public class EmployeesXmlMapper {
             }
             return;
         }
+        requireElementName(key);
         indent(xml, depth);
         List<Map.Entry<String, Object>> object = asObject(value);
         if (value == null || (object != null && !writesAnyElement(object))) {
@@ -343,6 +368,68 @@ public class EmployeesXmlMapper {
         return true;
     }
 
+    /**
+     * Accepts {@code name} when it is an {@code NCName}, or {@code xml:} followed by an {@code NCName};
+     * any other name raises an {@link IllegalArgumentException} whose message does not repeat it (D-359).
+     */
+    private static void requireElementName(String name) {
+        String localPart = name.startsWith(XML_PREFIX) ? name.substring(XML_PREFIX.length()) : name;
+        if (!isNcName(localPart)) {
+            throw new IllegalArgumentException(INVALID_NAME);
+        }
+    }
+
+    /**
+     * True when {@code name} is an XML 1.0 (Fifth Edition) {@code Name} holding no {@code :}: a non-empty
+     * run of code points whose first is a {@code NameStartChar} and whose others are each a
+     * {@code NameChar}. An unpaired surrogate is neither.
+     */
+    private static boolean isNcName(String name) {
+        if (name.isEmpty()) {
+            return false;
+        }
+        int index = 0;
+        while (index < name.length()) {
+            int codePoint = name.codePointAt(index);
+            boolean allowed = index == 0 ? isNameStartChar(codePoint) : isNameChar(codePoint);
+            if (!allowed) {
+                return false;
+            }
+            index += Character.charCount(codePoint);
+        }
+        return true;
+    }
+
+    /** True for a code point of the XML 1.0 {@code NameStartChar} production, {@code :} excluded. */
+    private static boolean isNameStartChar(int codePoint) {
+        return (codePoint >= 'A' && codePoint <= 'Z')
+                || codePoint == '_'
+                || (codePoint >= 'a' && codePoint <= 'z')
+                || (codePoint >= 0xC0 && codePoint <= 0xD6)
+                || (codePoint >= 0xD8 && codePoint <= 0xF6)
+                || (codePoint >= 0xF8 && codePoint <= 0x2FF)
+                || (codePoint >= 0x370 && codePoint <= 0x37D)
+                || (codePoint >= 0x37F && codePoint <= 0x1FFF)
+                || (codePoint >= 0x200C && codePoint <= 0x200D)
+                || (codePoint >= 0x2070 && codePoint <= 0x218F)
+                || (codePoint >= 0x2C00 && codePoint <= 0x2FEF)
+                || (codePoint >= 0x3001 && codePoint <= 0xD7FF)
+                || (codePoint >= 0xF900 && codePoint <= 0xFDCF)
+                || (codePoint >= 0xFDF0 && codePoint <= 0xFFFD)
+                || (codePoint >= 0x10000 && codePoint <= 0xEFFFF);
+    }
+
+    /** True for a code point of the XML 1.0 {@code NameChar} production, {@code :} excluded. */
+    private static boolean isNameChar(int codePoint) {
+        return isNameStartChar(codePoint)
+                || codePoint == '-'
+                || codePoint == '.'
+                || (codePoint >= '0' && codePoint <= '9')
+                || codePoint == 0xB7
+                || (codePoint >= 0x300 && codePoint <= 0x36F)
+                || (codePoint >= 0x203F && codePoint <= 0x2040);
+    }
+
     /** Appends {@code depth} tab characters. */
     private static void indent(StringBuilder xml, int depth) {
         for (int level = 0; level < depth; level++) {
@@ -350,19 +437,41 @@ public class EmployeesXmlMapper {
         }
     }
 
-    /** Appends {@code text}, writing {@code &}, {@code <} and {@code >} as entities and all else as is. */
+    /**
+     * Appends {@code text} code point by code point, writing {@code &}, {@code <} and {@code >} as entities
+     * and every other code point XML 1.0 allows as is; the first code point XML 1.0 does not allow, an
+     * unpaired surrogate included, raises an {@link IllegalArgumentException} (D-359).
+     */
     private static void appendEscaped(StringBuilder xml, String text) {
-        for (int index = 0; index < text.length(); index++) {
-            char c = text.charAt(index);
-            if (c == '&') {
+        int index = 0;
+        while (index < text.length()) {
+            int codePoint = text.codePointAt(index);
+            if (codePoint == '&') {
                 xml.append("&amp;");
-            } else if (c == '<') {
+            } else if (codePoint == '<') {
                 xml.append("&lt;");
-            } else if (c == '>') {
+            } else if (codePoint == '>') {
                 xml.append("&gt;");
+            } else if (isXmlChar(codePoint)) {
+                xml.appendCodePoint(codePoint);
             } else {
-                xml.append(c);
+                throw new IllegalArgumentException(INVALID_TEXT);
             }
+            index += Character.charCount(codePoint);
         }
+    }
+
+    /**
+     * True for a code point of the XML 1.0 {@code Char} production: U+0009, U+000A, U+000D, U+0020 to
+     * U+D7FF, U+E000 to U+FFFD and U+10000 to U+10FFFF. A surrogate code unit read on its own, U+D800 to
+     * U+DFFF, is not one.
+     */
+    private static boolean isXmlChar(int codePoint) {
+        return codePoint == 0x9
+                || codePoint == 0xA
+                || codePoint == 0xD
+                || (codePoint >= 0x20 && codePoint <= 0xD7FF)
+                || (codePoint >= 0xE000 && codePoint <= 0xFFFD)
+                || (codePoint >= 0x10000 && codePoint <= 0x10FFFF);
     }
 }

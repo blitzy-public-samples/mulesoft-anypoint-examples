@@ -5,6 +5,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
@@ -37,7 +38,7 @@ import org.springframework.stereotype.Component;
  * last move to complete determines the stored value.
  *
  * <pre>{@code
- * FileWatermarkStore store = new FileWatermarkStore(Path.of("data/watermark"));
+ * FileWatermarkStore store = new FileWatermarkStore("data/watermark");
  * store.read("timestamp");                                // Optional.empty() before the first write
  * store.write("timestamp", "2015-10-10T10:00:00.000Z");   // creates data/watermark/timestamp
  * store.read("timestamp");                                // Optional[2015-10-10T10:00:00.000Z]
@@ -49,14 +50,34 @@ public class FileWatermarkStore {
     private final Path storeDir;
 
     /**
-     * Creates a store over {@code storeDir}. The directory is not touched until the first
-     * {@link #write(String, String)}.
+     * Creates a store over the directory named by {@code storeDir}. The constructor converts the text with
+     * {@link Path#of(String, String...)} and accesses no file or directory. No directory is created or
+     * modified until the first {@link #write(String, String)}; {@link #read(String)} only inspects and reads
+     * files that already exist.
      *
-     * @param storeDir the directory that holds one file per key; the value of {@code watermark.store-dir}
-     * @throws NullPointerException if {@code storeDir} is {@code null}
+     * @param storeDir the raw value of {@code watermark.store-dir}, the directory that holds one file per key
+     * @throws IllegalArgumentException if {@code storeDir} is {@code null}, blank, the placeholder {@code TODO}
+     *                                  (ignoring surrounding whitespace), or not a valid path; the message
+     *                                  names {@code watermark.store-dir}
      */
-    public FileWatermarkStore(@Value("${watermark.store-dir}") Path storeDir) {
-        this.storeDir = Objects.requireNonNull(storeDir, "storeDir");
+    public FileWatermarkStore(@Value("${watermark.store-dir}") String storeDir) {
+        if (storeDir == null) {
+            throw new IllegalArgumentException(
+                    "watermark.store-dir must name the watermark directory, but it is not set");
+        }
+        if (storeDir.isBlank()) {
+            throw new IllegalArgumentException(
+                    "watermark.store-dir must name the watermark directory, but it is blank");
+        }
+        if (storeDir.strip().equals("TODO")) {
+            throw new IllegalArgumentException(
+                    "watermark.store-dir must name the watermark directory, but it is the placeholder TODO");
+        }
+        try {
+            this.storeDir = Path.of(storeDir);
+        } catch (InvalidPathException e) {
+            throw new IllegalArgumentException("watermark.store-dir is not a valid path: " + e.getMessage(), e);
+        }
     }
 
     /**

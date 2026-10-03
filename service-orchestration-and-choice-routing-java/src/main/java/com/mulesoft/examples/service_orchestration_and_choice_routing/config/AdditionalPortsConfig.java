@@ -1,9 +1,15 @@
 package com.mulesoft.examples.service_orchestration_and_choice_routing.config;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.UnknownHostException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.embedded.undertow.UndertowServletWebServerFactory;
+import org.springframework.boot.web.server.PortInUseException;
 import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -38,6 +44,16 @@ import org.springframework.core.env.Environment;
  * <p>Startup fails with an {@link IllegalStateException} that names the offending key when a listener
  * port lies outside {@code 1..65535}, when two listener ports are equal, when a listener port equals
  * {@code server.port}, or when a listener host is blank (D-011).
+ *
+ * <p>Each listener's address is checked when the web server is created, before any listener opens
+ * (D-349). Web server creation fails, and startup stops with no listener open, when:
+ * <ul>
+ *   <li>a listener port is in use: {@link PortInUseException}, reported as
+ *       {@code Web server failed to start. Port 9090 was already in use.};</li>
+ *   <li>a listener host does not resolve or is not an address of this machine, or the bind fails for
+ *       another reason: {@link IllegalStateException} naming the listener's {@code .port} key, the
+ *       host and the port.</li>
+ * </ul>
  */
 @Configuration(proxyBeanMethods = false)
 public class AdditionalPortsConfig {
@@ -173,17 +189,22 @@ public class AdditionalPortsConfig {
      * <p>The customizer registers one Undertow builder customizer per listener, in the order
      * {@code listener.http-listener-configuration3}, {@code listener.http-listener-configuration1},
      * {@code listener.http-listener-configuration2} and {@code listener.http-listener-configuration}.
-     * Each calls {@code Undertow.Builder.addHttpListener(port, host)} with the listener's port from
-     * {@code listenerPorts} and its host from the {@code listener.<config>.host} key. The builder
+     * Each checks the listener's address (D-349), then calls
+     * {@code Undertow.Builder.addHttpListener(port, host)} with the listener's port from
+     * {@code listenerPorts} and its host from the {@code listener.<config>.host} key (D-011). The builder
      * customizers run after Spring Boot has added the primary listener on {@code server.port} and
      * {@code server.address}; the primary listener is not added again.
      *
      * @param listenerPorts the validated ports of the four listeners
      * @param environment   the source of the four {@code listener.<config>.host} keys
      * @return the customizer of the Undertow servlet web server factory
-     * @throws IllegalStateException when a {@code listener.<config>.host} key is missing or blank; the
-     *                               web server fails to start with an {@link IllegalStateException}
-     *                               naming both keys when a listener port equals {@code server.port}
+     * @throws IllegalStateException when a {@code listener.<config>.host} key is missing or blank; web
+     *                               server creation fails, before any listener opens, with an
+     *                               {@link IllegalStateException} naming both keys when a listener port
+     *                               equals {@code server.port}, with a {@link PortInUseException} when a
+     *                               listener port is in use, and with an {@link IllegalStateException}
+     *                               naming the listener's {@code .port} key, host and port when its host
+     *                               does not resolve or another bind failure occurs (D-349)
      */
     @Bean
     public WebServerFactoryCustomizer<UndertowServletWebServerFactory> additionalListenersCustomizer(
@@ -222,7 +243,10 @@ public class AdditionalPortsConfig {
      * <p>When the builder customizer runs, the factory's port is the primary listener port that Spring
      * Boot has just bound to the builder. A listener port equal to it raises an
      * {@link IllegalStateException} naming {@code server.port} and {@code portKey}, and no listener is
-     * added.
+     * added. Otherwise the builder customizer checks the address with a probe bind (D-349), then calls
+     * {@code Undertow.Builder.addHttpListener(port, host)} (D-011) and logs the address at INFO. A failed
+     * check raises a {@link PortInUseException} or an {@link IllegalStateException} naming
+     * {@code portKey}, the host and the port, and no listener is added.
      *
      * @param factory the Undertow servlet web server factory
      * @param portKey the {@code listener.<config>.port} key of the listener
@@ -236,8 +260,52 @@ public class AdditionalPortsConfig {
                 throw new IllegalStateException(PRIMARY_PORT_KEY + " and " + portKey
                         + " must differ, both are " + port);
             }
+            requireBindable(portKey, port, host);
             builder.addHttpListener(port, host);
             LOG.info("Added HTTP listener {} on {}:{}", portKey, host, port);
         });
+    }
+
+    /**
+     * Resolves {@code host}, then binds and releases a server socket on {@code host} and {@code port}
+     * with {@code SO_REUSEADDR} enabled (D-349).
+     *
+     * @param portKey the {@code listener.<config>.port} key of the listener
+     * @param port    the listener port
+     * @param host    the listener host
+     * @throws PortInUseException    when the port is in use on that address
+     * @throws IllegalStateException when the host does not resolve, the port lies outside
+     *                               {@code 0..65535}, or the bind fails for another reason; the message
+     *                               names {@code portKey}, the host and the port
+     */
+    private static void requireBindable(String portKey, int port, String host) {
+        InetSocketAddress address;
+        try {
+            address = new InetSocketAddress(InetAddress.getByName(host), port);
+        } catch (UnknownHostException | IllegalArgumentException ex) {
+            throw cannotListen(portKey, port, host, ex);
+        }
+        try (ServerSocket probe = new ServerSocket()) {
+            probe.setReuseAddress(true);
+            probe.bind(address);
+        } catch (IOException ex) {
+            PortInUseException.throwIfPortBindingException(ex, () -> port);
+            throw cannotListen(portKey, port, host, ex);
+        }
+    }
+
+    /**
+     * Builds the exception for an address a listener cannot listen on.
+     *
+     * @param portKey the {@code listener.<config>.port} key of the listener
+     * @param port    the configured port
+     * @param host    the configured host
+     * @param cause   the failure of the resolution or of the bind
+     * @return an exception whose message names {@code portKey}, the host, the port and the cause's
+     *         message
+     */
+    private static IllegalStateException cannotListen(String portKey, int port, String host, Exception cause) {
+        return new IllegalStateException(portKey + " cannot listen on " + host + ":" + port + ": "
+                + cause.getMessage(), cause);
     }
 }

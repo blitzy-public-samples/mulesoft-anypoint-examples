@@ -1,0 +1,10 @@
+# In-JVM values for Tier 1 tests, loaded by @ActiveProfiles("test"): both URLs name port 9 of the loopback address and the key path names no file (D-012, D-331).
+netsuite:
+  account: TSTDRV0000000
+  rest-base-url: http://127.0.0.1:9
+  time-zone: America/Los_Angeles
+  oauth:
+    client-id: test-client-id
+    certificate-id: test-certificate-id
+    private-key-path: target/test-keys/absent-test-key.pem
+    token-uri: http://127.0.0.1:9/services/rest/auth/oauth2/v1/token

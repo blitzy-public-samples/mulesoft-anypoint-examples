@@ -28,18 +28,19 @@ import org.w3c.dom.Text;
  *
  * <ul>
  *   <li>DW-35, {@link #toOrderTshirt(String)} [:12-16]: the JSON request body of flow {@code orderTshirt} as the
- *       {@code ns0:OrderTshirt} element of namespace {@code http://mulesoft.org/tshirt-service};</li>
+ *       {@code ns0:OrderTshirt} element of namespace {@code http://mulesoft.org/tshirt-service} (D-342);</li>
  *   <li>DW-36, {@link #authenticationHeader(String)} [:17-23]: the {@code AuthenticationHeader} SOAP header that
  *       carries the API key the caller passes in (D-012);</li>
- *   <li>DW-37, {@link #toOrderJson(Node)} [:28-31]: the {@code OrderTshirtResponse} SOAP body element as JSON;</li>
+ *   <li>DW-37, {@link #toOrderJson(Node)} [:28-31]: the {@code OrderTshirtResponse} SOAP body element as JSON
+ *       (D-342);</li>
  *   <li>DW-38, {@link #toInventoryJson(Node)} [:41-45]: the content of the {@code ListInventoryResponse} SOAP body
- *       element of flow {@code listInventory} as JSON.</li>
+ *       element of flow {@code listInventory} as JSON (D-342).</li>
  * </ul>
  *
  * <p>JSON layout of DW-37 and DW-38: each object member starts on a new line, a {@code \n} line feed followed by
  * two spaces per nesting level; the closing brace of an object starts on a new line at the level of the line that
  * opened it; {@code ": "} (a colon and one space) separates a member name from its value; a comma directly follows
- * every member except the last; no line feed follows the root value. Element values:
+ * every member except the last; no line feed follows the root value (D-342). Element values:
  *
  * <ul>
  *   <li>an element with child elements is an object holding one member per child element, in document order,
@@ -51,7 +52,7 @@ import org.w3c.dom.Text;
  *   <li>an element with neither child elements nor text or CDATA, such as {@code <orderId/>}, is {@code null}.</li>
  * </ul>
  *
- * <p>Prefixes, namespace declarations and attributes are never written. The element
+ * <p>Prefixes, namespace declarations and attributes are never written (D-342). The element
  * {@code <ns2:OrderTshirtResponse xmlns:ns2="http://mulesoft.org/tshirt-service"><orderId>1</orderId></ns2:OrderTshirtResponse>}
  * gives, through {@link #toOrderJson(Node)}:
  *
@@ -91,7 +92,7 @@ public class TshirtMapper {
     private static final DocumentBuilderFactory DOCUMENT_BUILDER_FACTORY = newDocumentBuilderFactory();
 
     /**
-     * DW-35: writes a JSON document as the content of a new {@code ns0:OrderTshirt} element.
+     * DW-35: writes a JSON document as the content of a new {@code ns0:OrderTshirt} element (D-342).
      *
      * <p>The returned document holds one root element, {@code OrderTshirt} in namespace
      * {@code http://mulesoft.org/tshirt-service} with prefix {@code ns0} and the declaration
@@ -117,7 +118,7 @@ public class TshirtMapper {
      * @throws IllegalArgumentException when {@code json} is {@code null}, empty or whitespace only, or holds a
      *     second JSON value after the root value
      * @throws org.w3c.dom.DOMException when a JSON key is not a valid unqualified XML element name, unchanged
-     * @throws IOException a Jackson {@code JsonParseException} for malformed JSON, propagated unwrapped
+     * @throws IOException a Jackson {@code JsonParseException} for malformed JSON, propagated unwrapped (D-342)
      * @throws IllegalStateException when the JDK provides no namespace-aware {@code DocumentBuilder}
      */
     public Source toOrderTshirt(String json) throws IOException {
@@ -155,7 +156,7 @@ public class TshirtMapper {
     /**
      * DW-37: writes the {@code OrderTshirtResponse} SOAP body element as one JSON object whose single member is
      * named after the element's local name and holds the element's value, in the layout and with the element
-     * values described on this class.
+     * values described on this class (D-342).
      *
      * @param orderTshirtResponse the response element, or a document whose document element it is
      * @return the JSON text, with no line feed after the closing brace
@@ -180,7 +181,7 @@ public class TshirtMapper {
     /**
      * DW-38: writes the value of the {@code ListInventoryResponse} element of namespace
      * {@code http://mulesoft.org/tshirt-service} as JSON, in the layout and with the element values described on
-     * this class.
+     * this class (D-342).
      *
      * <p>A matching element with {@code inventory} items gives one object with one {@code "inventory"} member per
      * item, in document order, each an object of the item's child elements with string values, for example
@@ -346,7 +347,7 @@ public class TshirtMapper {
 
     /**
      * Pretty printer of the JSON layout described on {@link TshirtMapper}: object members indented by two spaces
-     * per level after a {@code \n} line feed, and {@code ": "} between a member name and its value. An instance
+     * per level after a {@code \n} line feed, and {@code ": "} between a member name and its value (D-342). An instance
      * tracks the nesting depth of the one generator that writes through it.
      */
     private static final class DwPrettyPrinter extends DefaultPrettyPrinter {

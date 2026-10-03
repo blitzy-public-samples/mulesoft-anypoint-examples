@@ -1,9 +1,1 @@
-# Test profile: in-JVM test values only (D-012).
-spring:
-  main:
-    banner-mode: "off"
-# Test log levels: root WARN, project package INFO, on Spring Boot's default Logback (D-266)
-logging:
-  level:
-    root: WARN
-    com.mulesoft.examples.rest_api_with_apikit: INFO
+# Test profile: no in-JVM test actor needs values in this project (D-012, D-347).

@@ -1,0 +1,16 @@
+# Copy this file to application-it.yml in this folder and replace every TODO; application-it.yml is git-ignored.
+netsuite:
+  account: TODO              # TODO: supply the NetSuite account ID
+  oauth:
+    client-id: TODO          # TODO: supply the M2M integration record client ID
+    certificate-id: TODO     # TODO: supply the M2M certificate ID
+    private-key-path: TODO   # TODO: supply the path to the PKCS#8 PEM private key of that certificate
+nets:
+  customer:
+    companyName: TODO        # TODO: supply the company name of the test customer to create
+    subsidiary:
+      internalId: TODO       # TODO: supply the internal ID of the test customer's subsidiary
+  item:
+    quantity: TODO           # TODO: supply the item supply plan line quantity to compare against
+  opportunity:
+    title: TODO              # TODO: supply the title prefix of an existing opportunity

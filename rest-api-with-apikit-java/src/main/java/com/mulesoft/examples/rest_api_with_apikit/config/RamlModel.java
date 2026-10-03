@@ -2,10 +2,14 @@ package com.mulesoft.examples.rest_api_with_apikit.config;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -20,7 +24,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.InputStreamSource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Component;
+import org.springframework.util.ResourceUtils;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.AbstractConstruct;
@@ -37,9 +44,30 @@ import org.yaml.snakeyaml.nodes.Tag;
  * served as {@code api.json} and the raw contract files served under the console (D-009).
  *
  * <p>The constructor reads and parses everything once; the instance is immutable afterwards and safe
- * for concurrent use. Each {@code !include <path>} is resolved relative to the RAML folder and replaced
- * by the included file's text, kept raw: schemas and examples are never parsed here, and a file that is
- * not strict JSON (for example {@code examples/match-get-example.json}) loads unchanged.
+ * for concurrent use. Each {@code !include <path>} is resolved against the URL of the RAML file, inside
+ * the RAML folder of that same classpath entry, and replaced by the included file's text, kept raw:
+ * schemas and examples are never parsed here, and a file that is not strict JSON (for example
+ * {@code examples/match-get-example.json}) loads unchanged.
+ *
+ * <p>Contract rules, each enforced at construction (D-354):
+ * <ul>
+ *   <li>A mapping holds each key once.</li>
+ *   <li>An include path is a relative path of file and folder names: no leading {@code /}, no
+ *       {@code \}, {@code :} or {@code %}, and no empty, {@code .} or {@code ..} segment. It names a
+ *       readable file in the RAML folder or one of its subfolders, in the classpath entry that holds the
+ *       RAML file.</li>
+ *   <li>A named-parameter {@code type} is exactly one of {@code string}, {@code number},
+ *       {@code integer}, {@code date}, {@code boolean} and {@code file}; an absent type reads
+ *       {@code string}.</li>
+ *   <li>Every element read as text ({@code title}, {@code version}, {@code baseUri},
+ *       {@code displayName}, {@code description}, {@code type}, {@code example}, {@code default},
+ *       {@code schema}, each {@code enum} item) and every mapping key is a scalar, not a YAML mapping,
+ *       sequence or set.</li>
+ *   <li>No resource mapping is the RAML root or the mapping of a resource that encloses it. The resource
+ *       tree is at most 50 levels deep, holds at most 10,000 resources, has no full path longer than
+ *       8,192 characters, and holds at most 100,000 model elements (resources, methods, responses,
+ *       bodies and parameters).</li>
+ * </ul>
  *
  * <p>Usage outside Spring:
  *
@@ -78,6 +106,25 @@ public class RamlModel {
     /** RAML 0.8 default type of a named parameter. */
     private static final String DEFAULT_TYPE = "string";
 
+    /** RAML 0.8 named-parameter types, matched exactly and case-sensitively (D-354). */
+    private static final List<String> PARAMETER_TYPES =
+            List.of("string", "number", "integer", "date", "boolean", "file");
+
+    /** Deepest resource level the walk enters; a resource at the RAML root is level 1 (D-354). */
+    private static final int MAX_RESOURCE_DEPTH = 50;
+
+    /** Largest number of resources the walk adds (D-354). */
+    private static final int MAX_RESOURCES = 10_000;
+
+    /** Longest full path template of a resource the walk accepts, in characters (D-354). */
+    private static final int MAX_PATH_LENGTH = 8_192;
+
+    /**
+     * Largest number of model elements the walk builds: resources, their URI parameters, methods, query
+     * parameters, request bodies, responses, response headers and response bodies (D-354).
+     */
+    private static final int MAX_MODEL_ELEMENTS = 100_000;
+
     private final String title;
     private final String version;
     private final String baseUri;
@@ -94,9 +141,14 @@ public class RamlModel {
      * file name is the part after it ({@code leagues.raml}).
      *
      * @param ramlLocation classpath location of the RAML file, {@code api/leagues.raml} by default
-     * @throws IllegalStateException if the location is blank, the RAML or an included file is not on the
-     *     classpath, the YAML does not parse, or a RAML node has an unsupported shape; the message names
-     *     the classpath path or the RAML node
+     * @throws IllegalStateException if the location is blank or names no file, or the RAML file is not on
+     *     the classpath; the message names the location. Also, with a message that starts with
+     *     {@code RAML <location>:}, if the YAML does not parse or a mapping holds a key twice, an
+     *     {@code !include} path breaks the include path rule or names no readable file in the RAML folder,
+     *     a parameter {@code type} is not a RAML 0.8 named-parameter type, a text element or mapping key is
+     *     a YAML collection, a resource refers back to an enclosing resource, the resource tree exceeds its
+     *     depth, resource, path-length or model-element limit, or a RAML node has an unsupported shape;
+     *     the message names the RAML node, the include path and its position, or the resource path (D-354)
      */
     public RamlModel(@Value("${apikit.leagues-config.raml}") String ramlLocation) {
         if (ramlLocation == null || ramlLocation.isBlank()) {
@@ -110,32 +162,36 @@ public class RamlModel {
             throw new IllegalStateException("RAML location " + location + " names no file");
         }
         byte[] ramlBytes = readClasspath(location);
+        URL ramlUrl = classpathUrl(location);
 
         LoaderOptions options = new LoaderOptions();
+        options.setAllowDuplicateKeys(false);
         options.setTagInspector(tag -> INCLUDE_TAG.equals(tag.getValue()));
-        IncludeConstructor constructor = new IncludeConstructor(options, ramlFolder);
-        Object root;
-        try {
-            root = new Yaml(constructor).load(new String(ramlBytes, StandardCharsets.UTF_8));
-        } catch (YAMLException e) {
-            throw new IllegalStateException("Cannot parse RAML " + location + ": " + e.getMessage(), e);
-        }
-        if (!(root instanceof Map<?, ?> raml)) {
-            throw new IllegalStateException("RAML " + location + " is not a YAML mapping");
-        }
-
-        this.title = text(raml.get("title"));
-        this.version = text(raml.get("version"));
-        this.baseUri = text(raml.get("baseUri"));
-        this.basePath = pathOf(baseUri);
-
+        IncludeConstructor constructor = new IncludeConstructor(options, ramlFolder, ramlUrl);
         List<Resource> walked = new ArrayList<>();
-        for (Map.Entry<?, ?> entry : raml.entrySet()) {
-            String key = String.valueOf(entry.getKey());
-            if (key.startsWith("/")) {
-                parseResource("", key, entry.getValue(), List.of(), walked);
+        try {
+            Object root = new Yaml(constructor).load(new String(ramlBytes, StandardCharsets.UTF_8));
+            if (!(root instanceof Map<?, ?> raml)) {
+                throw new IllegalStateException("the document is not a YAML mapping");
             }
+            this.title = text(raml.get("title"), "title");
+            this.version = text(raml.get("version"), "version");
+            this.baseUri = text(raml.get("baseUri"), "baseUri");
+            Set<Map<?, ?>> enclosing = Collections.newSetFromMap(new IdentityHashMap<>());
+            enclosing.add(raml);
+            int[] elements = {0};
+            for (Map.Entry<?, ?> entry : raml.entrySet()) {
+                String key = key(entry.getKey(), "root");
+                if (key.startsWith("/")) {
+                    parseResource("", key, entry.getValue(), List.of(), 1, enclosing, elements, walked);
+                }
+            }
+        } catch (YAMLException e) {
+            throw new IllegalStateException("RAML " + location + ": invalid YAML: " + e.getMessage(), e);
+        } catch (IllegalStateException e) {
+            throw new IllegalStateException("RAML " + location + ": " + e.getMessage(), e);
         }
+        this.basePath = pathOf(baseUri);
         this.resources = List.copyOf(walked);
 
         Map<String, byte[]> contractFiles = new LinkedHashMap<>(constructor.includedFiles);
@@ -458,12 +514,19 @@ public class RamlModel {
     }
 
     /**
-     * SnakeYAML safe constructor that resolves {@code !include <path>} relative to the RAML folder and
-     * records each included file's bytes by its include path.
+     * SnakeYAML safe constructor that resolves {@code !include <path>} against the URL of the RAML file,
+     * inside the RAML folder of that same classpath entry, and records each included file's bytes by its
+     * include path (D-354).
      */
     private static final class IncludeConstructor extends SafeConstructor {
 
         private final String ramlFolder;
+
+        /** URL of the RAML file as the class loader resolved it. */
+        private final URL ramlUrl;
+
+        /** {@link #ramlUrl} up to and including its last {@code /}: the URL of the RAML folder. */
+        private final String folderUrl;
 
         /** Bytes of every included file, keyed by trimmed include path, in first-include order. */
         private final Map<String, byte[]> includedFiles = new LinkedHashMap<>();
@@ -473,23 +536,59 @@ public class RamlModel {
          *
          * @param options the loader options of the parse
          * @param ramlFolder classpath folder of the RAML file, empty for the classpath root
+         * @param ramlUrl URL of the RAML file, a {@code file:} or {@code jar:} URL
          */
-        private IncludeConstructor(LoaderOptions options, String ramlFolder) {
+        private IncludeConstructor(LoaderOptions options, String ramlFolder, URL ramlUrl) {
             super(options);
             this.ramlFolder = ramlFolder;
+            this.ramlUrl = ramlUrl;
+            String url = ramlUrl.toString();
+            this.folderUrl = url.substring(0, url.lastIndexOf('/') + 1);
             this.yamlConstructors.put(new Tag(INCLUDE_TAG), new IncludeConstruct());
+        }
+
+        /**
+         * Reads the file that include path {@code path} names relative to {@link #ramlUrl}.
+         *
+         * @param path a trimmed include path that {@code includePathProblem} accepts
+         * @param location {@code <ramlFolder>/<path>}, the classpath location named in error messages
+         * @param where the tag, include path and YAML position named in error messages
+         * @return the file's bytes
+         * @throws IllegalStateException if the resolved URL is outside {@link #folderUrl} or is not a readable
+         *     file
+         */
+        private byte[] readInclude(String path, String location, String where) {
+            URL url;
+            try {
+                url = ResourceUtils.toRelativeURL(ramlUrl, path);
+            } catch (MalformedURLException e) {
+                throw new IllegalStateException(where + " is not a valid relative URL: " + e.getMessage(), e);
+            }
+            if (!url.toString().startsWith(folderUrl)) {
+                throw new IllegalStateException(
+                        where + " resolves to " + url + ", outside the RAML folder " + folderUrl);
+            }
+            UrlResource include = new UrlResource(url);
+            if (!include.isReadable()) {
+                throw new IllegalStateException(where + " names no readable file: classpath resource " + location
+                        + " is not a file in the RAML folder " + folderUrl);
+            }
+            return read(include, location);
         }
 
         /** Builds an {@link Included} from an {@code !include} scalar. */
         private final class IncludeConstruct extends AbstractConstruct {
 
             /**
-             * Loads the classpath file {@code <ramlFolder>/<path>} named by the scalar and returns its text.
+             * Loads the file {@code <ramlFolder>/<path>} named by the scalar from the RAML folder and returns its
+             * text.
              *
              * @param node the {@code !include} node
              * @return the include path and the file's UTF-8 text
-             * @throws IllegalStateException if the node is not a non-empty scalar or the file is not on the
-             *     classpath
+             * @throws IllegalStateException naming the include path and its position if the node is not a
+             *     non-empty scalar, the path is absolute, holds a {@code \}, {@code :} or {@code %} or an empty,
+             *     {@code .} or {@code ..} segment, or the path names no readable file in the RAML folder of the
+             *     RAML file's own classpath entry (D-354)
              */
             @Override
             public Object construct(Node node) {
@@ -500,11 +599,46 @@ public class RamlModel {
                 if (path.isEmpty()) {
                     throw new IllegalStateException(INCLUDE_TAG + " " + position(node) + " does not name a file");
                 }
+                String where = INCLUDE_TAG + " " + path + " " + position(node);
+                String problem = includePathProblem(path);
+                if (problem != null) {
+                    throw new IllegalStateException(where + " " + problem
+                            + "; an include path names a file in the RAML folder or one of its subfolders");
+                }
                 String location = ramlFolder.isEmpty() ? path : ramlFolder + "/" + path;
-                byte[] bytes = includedFiles.computeIfAbsent(path, key -> readClasspath(location));
+                byte[] bytes = includedFiles.computeIfAbsent(path, key -> readInclude(key, location, where));
                 return new Included(path, new String(bytes, StandardCharsets.UTF_8));
             }
         }
+    }
+
+    /**
+     * Returns what makes a trimmed, non-empty {@code !include} path unusable, or {@code null} for a relative
+     * path of file and folder names: no leading {@code /}, no {@code \}, {@code :} or {@code %}, and no
+     * empty, {@code .} or {@code ..} segment (D-354).
+     *
+     * @param path the include path
+     * @return the problem, or {@code null}
+     */
+    private static String includePathProblem(String path) {
+        if (path.startsWith("/")) {
+            return "is an absolute path";
+        }
+        if (path.indexOf('\\') >= 0) {
+            return "contains a backslash";
+        }
+        if (path.indexOf(':') >= 0) {
+            return "contains ':', a URL scheme or drive separator";
+        }
+        if (path.indexOf('%') >= 0) {
+            return "contains '%', a URL escape";
+        }
+        for (String segment : path.split("/", -1)) {
+            if (segment.isEmpty() || ".".equals(segment) || "..".equals(segment)) {
+                return "has an empty, '.' or '..' path segment";
+            }
+        }
+        return null;
     }
 
 
@@ -516,12 +650,35 @@ public class RamlModel {
      * @param relativePath the resource key, for example {@code /{teamId}}
      * @param value the resource mapping; {@code null} counts as an empty mapping
      * @param inherited URI parameters declared by the ancestors, nearest last
+     * @param depth the resource level, 1 for a resource at the RAML root
+     * @param enclosing the RAML root mapping and the mappings of the resources enclosing this one, by
+     *     identity
+     * @param elements one-element array holding the number of model elements built so far
      * @param out the resources walked so far
+     * @throws IllegalStateException naming the resource path if the path is longer than
+     *     {@value #MAX_PATH_LENGTH} characters, {@code depth} exceeds {@value #MAX_RESOURCE_DEPTH},
+     *     {@code out} already holds {@value #MAX_RESOURCES} resources, the mapping is one of
+     *     {@code enclosing}, or the model elements exceed {@value #MAX_MODEL_ELEMENTS} (D-354)
      */
-    private static void parseResource(
-            String parentPath, String relativePath, Object value, List<Parameter> inherited, List<Resource> out) {
+    private static void parseResource(String parentPath, String relativePath, Object value,
+            List<Parameter> inherited, int depth, Set<Map<?, ?>> enclosing, int[] elements, List<Resource> out) {
         String path = parentPath + relativePath;
+        if (path.length() > MAX_PATH_LENGTH) {
+            throw new IllegalStateException("RAML resource " + path.substring(0, 64) + "... has a path longer than "
+                    + MAX_PATH_LENGTH + " characters");
+        }
+        if (depth > MAX_RESOURCE_DEPTH) {
+            throw new IllegalStateException("RAML resource " + path + " is nested deeper than "
+                    + MAX_RESOURCE_DEPTH + " resource levels");
+        }
+        if (out.size() >= MAX_RESOURCES) {
+            throw new IllegalStateException("RAML resource " + path + " exceeds the limit of " + MAX_RESOURCES
+                    + " resources");
+        }
         Map<?, ?> properties = mapping(value, path);
+        if (enclosing.contains(properties)) {
+            throw new IllegalStateException("RAML resource " + path + " refers back to an enclosing resource");
+        }
 
         List<Parameter> declared = new ArrayList<>(inherited);
         for (Parameter parameter : parseParameters(properties.get("uriParameters"), true, path + " uriParameters")) {
@@ -529,24 +686,29 @@ public class RamlModel {
             declared.add(parameter);
         }
 
+        List<Parameter> uriParameters = uriParameters(path, declared);
+        count(elements, 1 + uriParameters.size(), path);
+
         List<Method> methods = new ArrayList<>();
         for (Map.Entry<?, ?> entry : properties.entrySet()) {
-            String key = String.valueOf(entry.getKey());
+            String key = key(entry.getKey(), path);
             if (METHOD_KEYS.contains(key)) {
-                methods.add(parseMethod(key, entry.getValue(), path));
+                methods.add(parseMethod(key, entry.getValue(), path, elements));
             }
         }
 
-        String displayName = text(properties.get("displayName"));
+        String displayName = text(properties.get("displayName"), path + " displayName");
         out.add(new Resource(path, displayName == null ? relativePath : displayName,
-                text(properties.get("description")), uriParameters(path, declared), methods));
+                text(properties.get("description"), path + " description"), uriParameters, methods));
 
+        enclosing.add(properties);
         for (Map.Entry<?, ?> entry : properties.entrySet()) {
-            String key = String.valueOf(entry.getKey());
+            String key = key(entry.getKey(), path);
             if (key.startsWith("/")) {
-                parseResource(path, key, entry.getValue(), declared, out);
+                parseResource(path, key, entry.getValue(), declared, depth + 1, enclosing, elements, out);
             }
         }
+        enclosing.remove(properties);
     }
 
     /**
@@ -584,15 +746,19 @@ public class RamlModel {
      * @param verb the lower-case method key
      * @param value the method mapping; {@code null} counts as an empty mapping
      * @param path full path of the owning resource
+     * @param elements one-element array holding the number of model elements built so far
      * @return the method
      */
-    private static Method parseMethod(String verb, Object value, String path) {
+    private static Method parseMethod(String verb, Object value, String path, int[] elements) {
         String context = verb.toUpperCase(Locale.ROOT) + " " + path;
         Map<?, ?> properties = mapping(value, context);
-        return new Method(verb, text(properties.get("description")),
-                parseParameters(properties.get("queryParameters"), false, context + " queryParameters"),
-                parseBodies(properties.get("body"), context + " body"),
-                parseResponses(properties.get("responses"), context + " responses"));
+        String description = text(properties.get("description"), context + " description");
+        List<Parameter> queryParameters =
+                parseParameters(properties.get("queryParameters"), false, context + " queryParameters");
+        List<Body> body = parseBodies(properties.get("body"), context + " body");
+        count(elements, 1 + queryParameters.size() + body.size(), context);
+        return new Method(verb, description, queryParameters, body,
+                parseResponses(properties.get("responses"), context + " responses", elements));
     }
 
     /**
@@ -600,12 +766,13 @@ public class RamlModel {
      *
      * @param value the mapping; {@code null} counts as an empty mapping
      * @param context the RAML node named in error messages
+     * @param elements one-element array holding the number of model elements built so far
      * @return the responses in RAML order
      */
-    private static List<Response> parseResponses(Object value, String context) {
+    private static List<Response> parseResponses(Object value, String context, int[] elements) {
         List<Response> responses = new ArrayList<>();
         for (Map.Entry<?, ?> entry : mapping(value, context).entrySet()) {
-            String key = String.valueOf(entry.getKey()).trim();
+            String key = key(entry.getKey(), context).trim();
             int status;
             try {
                 status = Integer.parseInt(key);
@@ -614,9 +781,11 @@ public class RamlModel {
             }
             String responseContext = context + " " + status;
             Map<?, ?> properties = mapping(entry.getValue(), responseContext);
-            responses.add(new Response(status, text(properties.get("description")),
-                    parseParameters(properties.get("headers"), false, responseContext + " headers"),
-                    parseBodies(properties.get("body"), responseContext + " body")));
+            String description = text(properties.get("description"), responseContext + " description");
+            List<Parameter> headers = parseParameters(properties.get("headers"), false, responseContext + " headers");
+            List<Body> bodies = parseBodies(properties.get("body"), responseContext + " body");
+            count(elements, 1 + headers.size() + bodies.size(), responseContext);
+            responses.add(new Response(status, description, headers, bodies));
         }
         return responses;
     }
@@ -631,11 +800,13 @@ public class RamlModel {
     private static List<Body> parseBodies(Object value, String context) {
         List<Body> bodies = new ArrayList<>();
         for (Map.Entry<?, ?> entry : mapping(value, context).entrySet()) {
-            String mediaType = String.valueOf(entry.getKey());
-            Map<?, ?> properties = mapping(entry.getValue(), context + " " + mediaType);
+            String mediaType = key(entry.getKey(), context);
+            String bodyContext = context + " " + mediaType;
+            Map<?, ?> properties = mapping(entry.getValue(), bodyContext);
             Object schema = properties.get("schema");
             Object example = properties.get("example");
-            bodies.add(new Body(mediaType, text(schema), includePath(schema), text(example), includePath(example)));
+            bodies.add(new Body(mediaType, text(schema, bodyContext + " schema"), includePath(schema),
+                    text(example, bodyContext + " example"), includePath(example)));
         }
         return bodies;
     }
@@ -647,28 +818,53 @@ public class RamlModel {
      * @param requiredByDefault the {@code required} value of a parameter that does not declare it
      * @param context the RAML node named in error messages
      * @return the parameters in RAML order
+     * @throws IllegalStateException naming the parameter and its {@code type} if the type is not one of
+     *     {@code string}, {@code number}, {@code integer}, {@code date}, {@code boolean} and {@code file}
+     *     (D-354)
      */
     private static List<Parameter> parseParameters(Object value, boolean requiredByDefault, String context) {
         List<Parameter> parameters = new ArrayList<>();
         for (Map.Entry<?, ?> entry : mapping(value, context).entrySet()) {
-            String name = String.valueOf(entry.getKey());
+            String name = key(entry.getKey(), context);
             String parameterContext = context + " " + name;
             Map<?, ?> properties = mapping(entry.getValue(), parameterContext);
-            String displayName = text(properties.get("displayName"));
-            String type = text(properties.get("type"));
+            String displayName = text(properties.get("displayName"), parameterContext + " displayName");
+            String type = text(properties.get("type"), parameterContext + " type");
+            if (type != null && !PARAMETER_TYPES.contains(type)) {
+                throw new IllegalStateException("RAML " + parameterContext + " type " + type
+                        + " is not a RAML 0.8 named-parameter type; the types are "
+                        + String.join(", ", PARAMETER_TYPES));
+            }
             parameters.add(new Parameter(
                     name,
                     displayName == null ? name : displayName,
-                    text(properties.get("description")),
+                    text(properties.get("description"), parameterContext + " description"),
                     type == null ? DEFAULT_TYPE : type,
                     bool(properties.get("required"), requiredByDefault, parameterContext + " required"),
-                    text(properties.get("example")),
+                    text(properties.get("example"), parameterContext + " example"),
                     integer(properties.get("minLength"), parameterContext + " minLength"),
                     integer(properties.get("maxLength"), parameterContext + " maxLength"),
-                    texts(properties.get("enum")),
-                    text(properties.get("default"))));
+                    texts(properties.get("enum"), parameterContext + " enum"),
+                    text(properties.get("default"), parameterContext + " default")));
         }
         return parameters;
+    }
+
+    /**
+     * Adds {@code added} to the number of model elements built so far.
+     *
+     * @param elements one-element array holding the number of model elements built so far
+     * @param added the elements a resource, method or response adds: itself and its parameters and bodies
+     * @param context the RAML node named in the error message
+     * @throws IllegalStateException naming {@code context} if the number exceeds
+     *     {@value #MAX_MODEL_ELEMENTS} (D-354)
+     */
+    private static void count(int[] elements, int added, String context) {
+        elements[0] += added;
+        if (elements[0] > MAX_MODEL_ELEMENTS) {
+            throw new IllegalStateException("RAML node " + context + " exceeds the limit of " + MAX_MODEL_ELEMENTS
+                    + " model elements (resources, methods, responses, bodies and parameters)");
+        }
     }
 
     /** Builds the {@code api.json} console model from the parsed contract. */
@@ -761,10 +957,38 @@ public class RamlModel {
      * @throws IllegalStateException naming {@code location} if the resource is missing or unreadable
      */
     private static byte[] readClasspath(String location) {
-        try (InputStream in = new ClassPathResource(location).getInputStream()) {
+        return read(new ClassPathResource(location), location);
+    }
+
+    /**
+     * Reads a contract file completely.
+     *
+     * @param source the file
+     * @param location the classpath location named in the error message
+     * @return the file bytes
+     * @throws IllegalStateException naming {@code location} if the file is missing or unreadable
+     */
+    private static byte[] read(InputStreamSource source, String location) {
+        try (InputStream in = source.getInputStream()) {
             return in.readAllBytes();
         } catch (IOException e) {
             throw new IllegalStateException("Cannot read classpath resource " + location + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Returns the URL the class loader resolves for a classpath resource.
+     *
+     * @param location the classpath location of a resource that was read
+     * @return the URL, a {@code file:} URL for an exploded classpath entry or a {@code jar:} URL inside a jar
+     * @throws IllegalStateException naming {@code location} if the class loader resolves no URL
+     */
+    private static URL classpathUrl(String location) {
+        try {
+            return new ClassPathResource(location).getURL();
+        } catch (IOException e) {
+            throw new IllegalStateException(
+                    "RAML " + location + ": cannot resolve its classpath URL: " + e.getMessage(), e);
         }
     }
 
@@ -787,15 +1011,50 @@ public class RamlModel {
     }
 
     /**
-     * Returns the text of a YAML value: an include's file text, any other value through
+     * Returns the text of a scalar YAML value: an include's file text, any other scalar through
      * {@link String#valueOf(Object)}, {@code null} for {@code null}.
+     *
+     * @param value a YAML value
+     * @param context the RAML node named in the error message
+     * @return the text, or {@code null}
+     * @throws IllegalStateException naming {@code context} if {@code value} is a YAML mapping, sequence or
+     *     set (D-354)
      */
-    private static String text(Object value) {
+    private static String text(Object value, String context) {
         if (value == null) {
             return null;
         }
         if (value instanceof Included included) {
             return included.text();
+        }
+        return scalar(value, context);
+    }
+
+    /**
+     * Returns a mapping key through {@link String#valueOf(Object)}; a {@code null} key reads {@code "null"}.
+     *
+     * @param key a key of a YAML mapping
+     * @param context the RAML node whose mapping holds the key, named in the error message
+     * @return the key text
+     * @throws IllegalStateException naming {@code context} if {@code key} is a YAML mapping, sequence or set
+     *     (D-354)
+     */
+    private static String key(Object key, String context) {
+        return scalar(key, context + " key");
+    }
+
+    /**
+     * Returns {@link String#valueOf(Object)} of a value that is not a YAML collection.
+     *
+     * @param value a YAML value or key
+     * @param context the RAML node named in the error message
+     * @return the text
+     * @throws IllegalStateException naming {@code context} if {@code value} is a YAML mapping, sequence or
+     *     set (D-354)
+     */
+    private static String scalar(Object value, String context) {
+        if (value instanceof Map<?, ?> || value instanceof Collection<?>) {
+            throw new IllegalStateException("RAML node " + context + " is not a scalar");
         }
         return String.valueOf(value);
     }
@@ -817,7 +1076,7 @@ public class RamlModel {
         if (value instanceof Number number) {
             return number.intValue();
         }
-        String digits = text(value).trim();
+        String digits = text(value, context).trim();
         try {
             return Integer.valueOf(digits);
         } catch (NumberFormatException e) {
@@ -837,29 +1096,35 @@ public class RamlModel {
         if (value instanceof Boolean flag) {
             return flag;
         }
-        String literal = text(value).trim();
+        String literal = text(value, context).trim();
         if ("true".equalsIgnoreCase(literal) || "false".equalsIgnoreCase(literal)) {
             return Boolean.parseBoolean(literal);
         }
         throw new IllegalStateException("RAML " + context + " value " + literal + " is not a boolean");
     }
 
-    /** Returns a YAML sequence as texts in order, a scalar as one text, {@code null} as an empty list. */
-    private static List<String> texts(Object value) {
+    /**
+     * Returns a YAML sequence of scalars as texts in order, a scalar as one text, {@code null} as an empty
+     * list.
+     *
+     * @throws IllegalStateException naming {@code context} if {@code value} is a mapping or set, or an item
+     *     is a YAML mapping, sequence or set (D-354)
+     */
+    private static List<String> texts(Object value, String context) {
         if (value == null) {
             return List.of();
         }
         if (value instanceof List<?> list) {
             List<String> values = new ArrayList<>();
             for (Object element : list) {
-                String item = text(element);
+                String item = text(element, context + " item");
                 if (item != null) {
                     values.add(item);
                 }
             }
             return values;
         }
-        return List.of(text(value));
+        return List.of(text(value, context));
     }
 
     /** Returns an unmodifiable copy of {@code list}, an empty list for {@code null}. */
