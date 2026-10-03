@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: import-contacts-into-salesforce-java
+  main:
+    web-application-type: none
+    keep-alive: true
+sfdc:
+  user: TODO  # TODO: supply the Salesforce username
+  password: TODO  # TODO: supply the Salesforce password
+  securityToken: TODO  # TODO: supply the Salesforce security token
+  key: TODO  # TODO: supply the connected app consumer key
+  secret: TODO  # TODO: supply the connected app consumer secret
+  login-url: https://login.salesforce.com  # TODO: use https://test.salesforce.com for a sandbox org
+file:
+  inbound:
+    path: src/main/resources/input
+    move-to-directory: src/main/resources/output
+    polling-frequency: 10000
+polling:
+  enabled: true

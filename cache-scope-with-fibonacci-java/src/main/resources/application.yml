@@ -1,0 +1,22 @@
+# Port of the HTTP_Listener_Configuration listener (D-065)
+http:
+  port: 8081
+# Bind address of the HTTP_Listener_Configuration listener
+listener:
+  http-listener-configuration:
+    host: localhost
+# Embedded Undertow port and bind address (D-010)
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+spring:
+  application:
+    name: cache-scope-with-fibonacci-java  # D-003
+  mvc:
+    throw-exception-if-no-handler-found: true  # an unmatched path raises NoHandlerFoundException
+    formcontent:
+      filter:
+        enabled: false                         # PUT, PATCH and DELETE form bodies reach the controller unparsed (D-183)
+  web:
+    resources:
+      add-mappings: false                      # no static-resource handler
