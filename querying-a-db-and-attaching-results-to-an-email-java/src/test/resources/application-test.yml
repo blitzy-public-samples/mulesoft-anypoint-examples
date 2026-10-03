@@ -1,0 +1,12 @@
+jdbc:
+  url: jdbc:mysql://localhost:3306/company  # unconnected JDBC URL of the mocked JDBC client (D-044)
+smtp:
+  host: localhost  # GreenMail SMTP server (D-012)
+  port: 3025  # GreenMail ServerSetupTest.SMTP port
+  user: "sender%40example.com"  # URL-encoded GreenMail login sender@example.com
+  password: secret
+  response-timeout: 10000
+mail:
+  from: sender@example.com
+  to: receiver@example.com
+  subject: Export from Excel

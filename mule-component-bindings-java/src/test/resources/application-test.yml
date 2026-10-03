@@ -1,0 +1,10 @@
+server:
+  port: 0
+twitter:
+  accessKey: test-twitter-access-key
+  accessSecret: test-twitter-access-secret
+  apiKey: test-twitter-api-key
+  apiSecret: test-twitter-api-secret
+stockstats:
+  stocklyticsApiKey: test-stocklytics-key
+  sentiment140ApiKey: test-sentiment140-key
