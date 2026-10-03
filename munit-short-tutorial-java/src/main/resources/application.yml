@@ -1,0 +1,16 @@
+http:
+  port: 8081                       # listener port of exampleFlow (D-065)
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+spring:
+  application:
+    name: munit-short-tutorial-java
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false

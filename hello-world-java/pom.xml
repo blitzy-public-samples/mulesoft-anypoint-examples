@@ -66,6 +66,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <release>${java.version}</release>
+                    <!-- Emits package-info.class only for a package-info.java that carries an annotation (D-086, D-198, D-220) -->
+                    <createMissingPackageInfoClass>false</createMissingPackageInfoClass>
                 </configuration>
             </plugin>
 

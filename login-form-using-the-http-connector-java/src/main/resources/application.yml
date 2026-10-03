@@ -1,0 +1,28 @@
+# HttpListenerConfig and HttpRequestConfig port, login-form-using-the-http-connector.xml:4-5 (D-065)
+http:
+  port: 8081
+# HttpListenerConfig host, login-form-using-the-http-connector.xml:4
+listener:
+  http-listener-config:
+    host: 0.0.0.0
+# HttpRequestConfig host and port, login-form-using-the-http-connector.xml:5
+request:
+  http-request-config:
+    host: 0.0.0.0
+    port: ${http.port}
+# Credentials of DoLoginFlow and CallLoginFlowUsingRequester, login-form-using-the-http-connector.xml:21,38-40 (D-012)
+login:
+  username: TODO  # TODO: supply the login username (D-012)
+  password: TODO  # TODO: supply the login password (D-012)
+# Embedded Undertow port and bind address of HttpListenerConfig, login-form-using-the-http-connector.xml:4 (D-010)
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-config.host}
+# No-listener 404 and any-method dispatch of HttpListenerConfig, login-form-using-the-http-connector.xml:4,35
+spring:
+  mvc:
+    throw-exception-if-no-handler-found: true
+    dispatch-trace-request: true
+  web:
+    resources:
+      add-mappings: false

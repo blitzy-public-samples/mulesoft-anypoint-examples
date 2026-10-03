@@ -1,0 +1,20 @@
+# Port of HTTP_Listener_Configuration; default per D-065
+http:
+  port: 8081
+# Bind address and port of HTTP_Listener_Configuration
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+    port: ${http.port}
+# Port and bind address of the embedded Undertow server (D-010)
+server:
+  port: ${listener.http-listener-configuration.port}
+  address: ${listener.http-listener-configuration.host}
+spring:
+  mvc:
+    # A path without a handler raises NoHandlerFoundException (D-010, D-066)
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      # Registers no static-resource handler
+      add-mappings: false
