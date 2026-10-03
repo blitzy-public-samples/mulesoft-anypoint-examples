@@ -49,7 +49,9 @@ public class DiscountRequestMapperTest {
         assertNotNull(result);
         assertEquals(HashMap.class, result.getClass());
         assertEquals(Set.of("purchases", "months", "membership"), result.keySet());
+        assertEquals(Integer.class, result.get("purchases").getClass());
         assertEquals(Integer.valueOf(2000), result.get("purchases"));
+        assertEquals(Integer.class, result.get("months").getClass());
         assertEquals(Integer.valueOf(12), result.get("months"));
         assertEquals("free", result.get("membership"));
         assertEquals(String.class, result.get("membership").getClass());

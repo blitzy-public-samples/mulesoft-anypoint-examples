@@ -19,6 +19,9 @@ retrieve-person-flow:
 spring:
   mvc:
     throw-exception-if-no-handler-found: true
+    dispatch-trace-request: true  # D-436
   web:
     resources:
       add-mappings: false
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.web.servlet.error.ErrorMvcAutoConfiguration  # D-436

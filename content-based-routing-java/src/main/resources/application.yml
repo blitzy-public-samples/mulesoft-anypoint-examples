@@ -14,6 +14,8 @@ spring:
   mvc:
     # A path without a handler raises NoHandlerFoundException (D-010, D-066)
     throw-exception-if-no-handler-found: true
+    # TRACE requests are dispatched to the handler mappings like every other method
+    dispatch-trace-request: true
   web:
     resources:
       # Registers no static-resource handler

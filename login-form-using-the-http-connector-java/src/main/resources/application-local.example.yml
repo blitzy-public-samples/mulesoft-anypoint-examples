@@ -1,0 +1,4 @@
+# Copy to application-local.yml and run with --spring.profiles.active=local (D-012)
+login:
+  username: TODO  # TODO: supply the login username, login-form-using-the-http-connector.xml:21,39 (D-012)
+  password: TODO  # TODO: supply the login password, login-form-using-the-http-connector.xml:21,40 (D-012)

@@ -1,0 +1,6 @@
+# Test profile: random HTTP port on localhost.
+http:
+  port: 0
+listener:
+  http-listener-configuration:
+    host: localhost
