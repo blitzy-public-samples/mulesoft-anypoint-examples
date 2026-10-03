@@ -1,0 +1,2 @@
+polling:
+  enabled: false  # disables the scheduled CSV poller (scheduler/LeadsFilePoller)

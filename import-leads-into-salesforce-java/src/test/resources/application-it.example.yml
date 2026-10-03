@@ -1,0 +1,8 @@
+# Copy to application-it.yml in this folder and replace each TODO value.
+sfdc:
+  user: TODO  # TODO: supply the Salesforce username
+  password: TODO  # TODO: supply the Salesforce password
+  securityToken: TODO  # TODO: supply the Salesforce security token
+  key: TODO  # TODO: supply the connected app consumer key
+  secret: TODO  # TODO: supply the connected app consumer secret
+  login-url: https://login.salesforce.com  # TODO: use https://test.salesforce.com for a sandbox org

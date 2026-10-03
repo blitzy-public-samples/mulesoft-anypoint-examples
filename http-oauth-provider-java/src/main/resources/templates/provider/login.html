@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>#[providerName] login</title>
+</head>
+<body>
+<main>
+<h1>#[providerName]</h1>
+<form method="post" action="/authorize">
+<p>
+<label for="username">Username</label>
+<input id="username" name="username" type="text" autocomplete="username">
+</p>
+<p>
+<label for="password">Password</label>
+<input id="password" name="password" type="password" autocomplete="current-password">
+</p>
+#[hiddenFields]
+<button type="submit">Login</button>
+</form>
+</main>
+</body>
+</html>

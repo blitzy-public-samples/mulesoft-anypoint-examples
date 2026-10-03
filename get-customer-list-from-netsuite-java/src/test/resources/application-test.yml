@@ -1,0 +1,7 @@
+# In-JVM values for Tier 1 tests; loaded by @ActiveProfiles("test") (D-012).
+netsuite:
+  account: test-account
+  oauth:
+    client-id: test-client-id
+    certificate-id: test-certificate-id
+    private-key-path: target/no-such-key.pem

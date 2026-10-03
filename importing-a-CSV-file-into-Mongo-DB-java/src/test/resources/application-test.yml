@@ -1,0 +1,14 @@
+polling:
+  enabled: false
+spring:
+  main:
+    keep-alive: false
+database:
+  name: customers
+  user: ""
+  password: ""
+de:
+  flapdoodle:
+    mongodb:
+      embedded:
+        version: 6.0.5

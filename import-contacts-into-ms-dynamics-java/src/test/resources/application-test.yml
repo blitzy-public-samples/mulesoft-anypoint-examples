@@ -1,0 +1,12 @@
+spring:
+  main:
+    keep-alive: false
+polling:
+  enabled: false
+dynamics:
+  connect-timeout: 1000
+  response-timeout: 1000
+  oauth:
+    tenant-id: test-tenant
+    client-id: test-client
+    client-secret: test-secret

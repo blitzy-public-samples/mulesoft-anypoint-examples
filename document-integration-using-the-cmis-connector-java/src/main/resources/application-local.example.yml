@@ -1,0 +1,5 @@
+# Copy to application-local.yml, set the values, run with --spring.profiles.active=local (D-012)
+cmis:
+  base-url: TODO  # TODO: supply the CMIS AtomPub service URL
+  username: TODO  # TODO: supply the CMIS user name
+  password: TODO  # TODO: supply the CMIS password

@@ -1,0 +1,5 @@
+sfdc:
+  key: TODO  # TODO: supply the Salesforce connected-app consumer key
+  secret: TODO  # TODO: supply the Salesforce connected-app consumer secret
+  user: TODO  # TODO: supply the Salesforce username
+  password: TODO  # TODO: supply the Salesforce password

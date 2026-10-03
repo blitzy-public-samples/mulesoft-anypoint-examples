@@ -1,0 +1,6 @@
+dynamics:
+  service-url: TODO  # TODO: supply the Dataverse organization URL https://<org>.crm.dynamics.com
+  oauth:
+    tenant-id: TODO  # TODO: supply the Microsoft Entra tenant ID
+    client-id: TODO  # TODO: supply the app registration client ID
+    client-secret: TODO  # TODO: supply the app registration client secret

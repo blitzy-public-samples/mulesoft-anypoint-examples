@@ -1,0 +1,7 @@
+# Copy to application-it.yml in this folder and replace every TODO value; used by *IT classes through @ActiveProfiles("it").
+netsuite:
+  account: TODO  # TODO: supply the NetSuite account ID
+  oauth:
+    client-id: TODO  # TODO: supply the client ID of the OAuth 2.0 M2M integration record
+    certificate-id: TODO  # TODO: supply the certificate ID of the M2M certificate mapping
+    private-key-path: TODO  # TODO: supply the path to the PKCS#8 PEM private key of that certificate
