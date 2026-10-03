@@ -1,0 +1,26 @@
+http:
+  port: 8081
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+spring:
+  application:
+    name: upload-to-ftp-after-converting-json-to-xml-java
+  mvc:
+    throw-exception-if-no-handler-found: true
+    dispatch-trace-request: true
+    dispatch-options-request: true
+  web:
+    resources:
+      add-mappings: false
+ftp:
+  host: TODO  # TODO: supply the FTP server host
+  port: 21
+  user: TODO  # TODO: supply the FTP user
+  password: TODO  # TODO: supply the FTP password
+  path: /Upload/
+  output-pattern: muleExample.xml
+  response-timeout: 10000

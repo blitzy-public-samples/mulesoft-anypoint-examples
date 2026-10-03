@@ -1,0 +1,8 @@
+spring:
+  artemis:
+    mode: embedded
+    embedded:
+      enabled: true
+      persistent: false
+      queues: in,ActiveMQ.DLQ
+      topics: topic1

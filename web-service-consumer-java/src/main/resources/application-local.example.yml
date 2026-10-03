@@ -1,0 +1,3 @@
+# Copy to application-local.yml, set the value, run with --spring.profiles.active=local (D-012)
+tshirt:
+  api-key: TODO  # TODO: supply the t-shirt service API key

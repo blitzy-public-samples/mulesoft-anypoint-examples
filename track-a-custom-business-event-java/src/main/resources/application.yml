@@ -1,0 +1,16 @@
+# HTTP listener port (D-065)
+http:
+  port: 8081
+# Bind address of the HTTP_Listener_Configuration listener
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+spring:
+  application:
+    name: track-a-custom-business-event-java
+  web:
+    resources:
+      add-mappings: false

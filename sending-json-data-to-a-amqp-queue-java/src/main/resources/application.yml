@@ -1,0 +1,29 @@
+http:
+  port: 8081                       # D-065
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+spring:
+  mvc:
+    throw-exception-if-no-handler-found: true
+    dispatch-trace-request: true
+  web:
+    resources:
+      add-mappings: false
+  rabbitmq:
+    host: localhost
+    port: 5672
+    virtual-host: /
+    username: TODO                 # TODO: supply the RabbitMQ user
+    password: TODO                 # TODO: supply the RabbitMQ password
+amqp:
+  outbound:
+    exchange-name: sales_exchange
+    queue-name: sales_queue
+    routing-key: ""
+    response-timeout: 10000
+  connector:
+    connect-on-startup: true

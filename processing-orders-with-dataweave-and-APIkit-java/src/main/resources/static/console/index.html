@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- APIkit console page (D-009); behaviour in console.js. -->
+<title>Currency API Console</title>
+<style>
+  :root {
+    --console-space: 0.5rem;
+  }
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+  body {
+    margin-block: 1rem;
+    margin-inline: 2rem;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.4;
+  }
+  #resources {
+    margin-block-end: 1.5rem;
+  }
+  .resource {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--console-space);
+    margin-block: var(--console-space);
+  }
+  button {
+    font: inherit;
+  }
+  .method {
+    padding-block: 0.25rem;
+    padding-inline: 0.75rem;
+  }
+  .response {
+    margin-block: var(--console-space);
+  }
+  pre {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+</style>
+</head>
+<body>
+  <h1 id="console-title">Currency API</h1>
+  <div id="resources"></div>
+  <div id="details" style="display:none">
+    <h2 id="details-title"></h2>
+    <h3>Request</h3>
+    <div id="request-format"></div>
+    <h3>Responses</h3>
+    <div id="responses"></div>
+    <div id="try-it">
+      <h3>Try It</h3>
+      <div id="try-it-params"></div>
+      <div id="try-it-request"></div>
+      <button id="try-it-send" type="button"></button>
+      <h4>Status</h4>
+      <pre id="try-it-status"></pre>
+      <h4>Headers</h4>
+      <pre id="try-it-headers"></pre>
+      <h4>Body</h4>
+      <pre id="try-it-body"></pre>
+    </div>
+  </div>
+  <script src="console.js"></script>
+</body>
+</html>

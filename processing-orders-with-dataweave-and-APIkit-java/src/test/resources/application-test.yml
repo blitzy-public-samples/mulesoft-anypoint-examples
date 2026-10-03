@@ -1,0 +1,7 @@
+polling:
+  enabled: false
+file:
+  inbound:
+    path: target/test-input
+  outbound:
+    path: target/test-output

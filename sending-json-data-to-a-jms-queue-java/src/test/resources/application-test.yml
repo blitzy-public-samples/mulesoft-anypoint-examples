@@ -1,0 +1,8 @@
+# Test profile: embedded, non-persistent Artemis broker with queue sales (D-012, D-080).
+spring:
+  artemis:
+    mode: embedded
+    embedded:
+      enabled: true
+      persistent: false
+      queues: sales

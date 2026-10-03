@@ -1,0 +1,18 @@
+# Test profile of service-orchestration-and-choice-routing-java: in-JVM test actors only (D-012, D-039, D-254)
+
+# In-memory Derby XA database muleEmbeddedDB (D-026, D-254)
+derby-data-source:
+  url: jdbc:derby:memory:muleEmbeddedDB;create=true
+
+# Narayana object store directory under target/ (D-026, D-254)
+narayana:
+  log-dir: target/narayana-test
+
+spring:
+  # In-VM embedded Artemis broker, non-persistent, with the queues inhouseOrder and audit (D-026, D-039)
+  artemis:
+    mode: embedded
+    embedded:
+      enabled: true
+      persistent: false
+      queues: inhouseOrder,audit

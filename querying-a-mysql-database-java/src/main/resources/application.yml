@@ -1,0 +1,25 @@
+http:
+  port: 8081
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+jdbc:
+  url: TODO  # TODO: supply the JDBC URL of the MySQL company database, including its user and password parameters
+db:
+  mysql-configuration:
+    url: ${jdbc.url}
+    driver-class-name: com.mysql.jdbc.Driver
+spring:
+  application:
+    name: querying-a-mysql-database-java
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+  sql:
+    init:
+      mode: never

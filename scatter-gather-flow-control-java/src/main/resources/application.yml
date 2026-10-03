@@ -1,0 +1,26 @@
+http:
+  port: 8081
+listener:
+  http-listener-configuration:
+    host: 0.0.0.0
+server:
+  port: ${http.port}
+  address: ${listener.http-listener-configuration.host}
+spring:
+  application:
+    name: scatter-gather-flow-control-java
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+smtp:
+  host: TODO  # TODO: supply the SMTP server host
+  port: 587
+  user: TODO  # TODO: supply the SMTP user
+  password: TODO  # TODO: supply the SMTP password
+  subject: Scatter gather example - aggregation
+  response-timeout: 10000
+mail:
+  from: TODO  # TODO: supply the sender address
+  to: TODO  # TODO: supply the recipient address

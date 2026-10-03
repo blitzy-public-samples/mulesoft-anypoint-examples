@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Console</title>
+<style>
+  :root {
+    --console-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --console-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --console-text: #1f2328;
+    --console-muted: #57606a;
+    --console-bg: #ffffff;
+    --console-surface: #f6f8fa;
+    --console-border: #d0d7de;
+    --console-input-border: #6e7781;
+    --console-link: #0b57d0;
+    --console-focus: #0b57d0;
+    --console-primary: #0b57d0;
+    --console-success: #1a7f37;
+    --console-error: #b3261e;
+    --console-error-surface: #fdecea;
+    --console-verb-get: #1a7f37;
+    --console-verb-post: #0a58ca;
+    --console-verb-put: #9a6700;
+    --console-verb-patch: #6e40c9;
+    --console-verb-delete: #cf222e;
+    --console-verb-other: #57606a;
+    --console-gap: 1rem;
+    --console-space: 0.5rem;
+    --console-space-sm: 0.25rem;
+    --console-radius: 4px;
+    --console-small: 0.8125rem;
+    --console-pre-max: 24rem;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--console-gap);
+    margin: 1rem;
+    font-family: var(--console-font);
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--console-text);
+    background-color: var(--console-bg);
+    overflow-wrap: anywhere;
+  }
+
+  h1, h2, h3, h4, h5 {
+    margin: 0;
+    line-height: 1.25;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+  }
+
+  h3 {
+    font-size: 1rem;
+  }
+
+  h4 {
+    font-size: 0.9375rem;
+  }
+
+  h5 {
+    font-size: 0.875rem;
+  }
+
+  a {
+    color: var(--console-link);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--console-focus);
+    outline-offset: 2px;
+  }
+
+  .request-format :focus-visible,
+  .response :focus-visible,
+  pre:focus-visible {
+    outline-offset: -2px;
+  }
+
+  .skip-link {
+    position: absolute;
+    inset-block-start: -10rem;
+    inset-inline-start: 1rem;
+    z-index: 1;
+    padding-block: var(--console-space);
+    padding-inline: 0.75rem;
+    border: 1px solid var(--console-border);
+    border-radius: var(--console-radius);
+    background-color: var(--console-bg);
+  }
+
+  .skip-link:focus-visible {
+    inset-block-start: 1rem;
+  }
+
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--console-space);
+  }
+
+  .stack > * {
+    margin-block: 0;
+  }
+
+  .stack > :empty:not(button) {
+    display: none;
+  }
+
+  .stack > a,
+  .response > a {
+    align-self: flex-start;
+  }
+
+  .console-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--console-space) var(--console-gap);
+    padding-block-end: var(--console-space);
+    border-block-end: 1px solid var(--console-border);
+  }
+
+  .console-error {
+    padding-block: var(--console-space);
+    padding-inline: 0.75rem;
+    border: 1px solid var(--console-error);
+    border-radius: var(--console-radius);
+    background-color: var(--console-error-surface);
+    color: var(--console-error);
+  }
+
+  .console-layout {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--console-gap);
+  }
+
+  .resource-list {
+    flex: 0 0 30%;
+    min-inline-size: min(15rem, 100%);
+  }
+
+  .details {
+    flex: 1 1 calc(70% - var(--console-gap));
+    min-inline-size: min(20rem, 100%);
+  }
+
+  .details-columns {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 1.5rem;
+  }
+
+  .details-main {
+    flex: 3 1 20rem;
+    min-inline-size: 0;
+  }
+
+  .try-it {
+    flex: 2 1 20rem;
+    min-inline-size: 0;
+    padding: var(--console-gap);
+    border: 1px solid var(--console-border);
+    border-radius: var(--console-radius);
+    background-color: var(--console-surface);
+  }
+
+  .section-heading {
+    padding-block-start: var(--console-space);
+    border-block-start: 1px solid var(--console-border);
+  }
+
+  .resource {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    padding-block: var(--console-space);
+    padding-inline: 0.625rem;
+    border: 1px solid var(--console-border);
+    border-radius: var(--console-radius);
+  }
+
+  .resource-path,
+  .resource-name {
+    flex: 1 0 100%;
+  }
+
+  .resource-path {
+    font-family: var(--console-mono);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .resource-name {
+    font-size: var(--console-small);
+    color: var(--console-muted);
+  }
+
+  .method-button {
+    --console-verb: var(--console-verb-other);
+    min-inline-size: 4rem;
+    min-block-size: 2rem;
+    padding-block: var(--console-space-sm);
+    padding-inline: var(--console-space);
+    border: 1px solid transparent;
+    border-radius: var(--console-radius);
+    background-color: var(--console-verb);
+    color: var(--console-bg);
+    font-family: var(--console-font);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+  }
+
+  .method-button[data-method="GET"] {
+    --console-verb: var(--console-verb-get);
+  }
+
+  .method-button[data-method="POST"] {
+    --console-verb: var(--console-verb-post);
+  }
+
+  .method-button[data-method="PUT"] {
+    --console-verb: var(--console-verb-put);
+  }
+
+  .method-button[data-method="PATCH"] {
+    --console-verb: var(--console-verb-patch);
+  }
+
+  .method-button[data-method="DELETE"] {
+    --console-verb: var(--console-verb-delete);
+  }
+
+  .method-button.selected {
+    box-shadow: 0 0 0 2px var(--console-bg), 0 0 0 4px var(--console-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  pre {
+    margin: 0;
+    max-block-size: var(--console-pre-max);
+    padding-block: var(--console-space);
+    padding-inline: 0.625rem;
+    overflow: auto;
+    border: 1px solid var(--console-border);
+    border-radius: var(--console-radius);
+    background-color: var(--console-surface);
+    font-family: var(--console-mono);
+    font-size: var(--console-small);
+    white-space: pre-wrap;
+  }
+
+  code {
+    font-family: var(--console-mono);
+    font-size: var(--console-small);
+  }
+
+  .request-format,
+  .response {
+    overflow-x: auto;
+  }
+
+  table.params {
+    inline-size: 100%;
+    border-collapse: collapse;
+    font-size: var(--console-small);
+  }
+
+  table.params th,
+  table.params td {
+    padding-block: var(--console-space-sm);
+    padding-inline: 0.375rem;
+    border: 1px solid var(--console-border);
+    text-align: start;
+    vertical-align: top;
+    overflow-wrap: normal;
+  }
+
+  table.params th {
+    background-color: var(--console-surface);
+    font-weight: 600;
+  }
+
+  .response {
+    display: flex;
+    flex-direction: column;
+    gap: var(--console-space);
+    padding-block: var(--console-space);
+    padding-inline: 0.75rem;
+    border: 1px solid var(--console-border);
+    border-inline-start: 4px solid var(--console-muted);
+    border-radius: var(--console-radius);
+  }
+
+  .response > * {
+    margin-block: 0;
+  }
+
+  .response[data-status^="2"] {
+    border-inline-start-color: var(--console-success);
+  }
+
+  .response[data-status^="4"],
+  .response[data-status^="5"] {
+    border-inline-start-color: var(--console-error);
+  }
+
+  .param {
+    display: flex;
+    flex-direction: column;
+    gap: var(--console-space-sm);
+  }
+
+  label {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  input[type="text"],
+  textarea {
+    inline-size: 100%;
+    padding-block: 0.375rem;
+    padding-inline: var(--console-space);
+    border: 1px solid var(--console-input-border);
+    border-radius: var(--console-radius);
+    background-color: var(--console-bg);
+    color: var(--console-text);
+  }
+
+  input[type="text"] {
+    min-block-size: 2.25rem;
+    font: inherit;
+  }
+
+  textarea {
+    display: block;
+    min-block-size: 10rem;
+    font-family: var(--console-mono);
+    font-size: var(--console-small);
+    resize: vertical;
+  }
+
+  .try-it pre,
+  .try-it code {
+    background-color: var(--console-bg);
+  }
+
+  .try-it-send {
+    align-self: flex-start;
+    min-inline-size: 6rem;
+    min-block-size: 2.75rem;
+    padding-block: var(--console-space);
+    padding-inline: 1.25rem;
+    border: 1px solid transparent;
+    border-radius: var(--console-radius);
+    background-color: var(--console-primary);
+    color: var(--console-bg);
+    font-family: var(--console-font);
+    font-size: 0.875rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .try-it-response {
+    padding-block-start: var(--console-space);
+    border-block-start: 1px solid var(--console-border);
+  }
+
+  .try-it-response[data-state="pending"] {
+    opacity: 0.65;
+    cursor: progress;
+  }
+
+  .try-it-response[data-state="error"] .response-body {
+    border-color: var(--console-error);
+    color: var(--console-error);
+  }
+
+  .response-status {
+    font-weight: 700;
+  }
+
+  .response-status[data-status^="2"] {
+    color: var(--console-success);
+  }
+
+  .response-status[data-status^="4"],
+  .response-status[data-status^="5"] {
+    color: var(--console-error);
+  }
+
+  @media (hover: hover) {
+    a:hover {
+      text-decoration-thickness: 2px;
+    }
+
+    .method-button:hover,
+    .try-it-send:hover {
+      filter: brightness(0.9);
+    }
+  }
+
+  .method-button:active,
+  .try-it-send:active {
+    filter: brightness(0.8);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .method-button,
+    .try-it-send {
+      transition: filter 150ms ease-out;
+    }
+  }
+</style>
+</head>
+<body>
+  <!-- Interactive API console of the La Liga RAML (D-009). console.js fills the elements below from api.json. -->
+  <!-- Element ids, the inline display:none of #console-error and #details and the data-state of #response are read and written by console.js and ApiConsoleTest (D-009); the stylesheet selects classes and attributes, and the skip link and ARIA attributes mark the page landmarks (D-249). -->
+  <a class="skip-link" href="#console-layout">Skip to main content</a>
+  <div id="console-header" class="console-header" role="banner">
+    <h1 id="api-title">API Console</h1>
+    <a id="raml-link" href="leagues.raml">leagues.raml</a>
+  </div>
+  <div id="console-error" style="display:none" class="console-error" role="alert"></div>
+  <div id="console-layout" class="console-layout" role="main" tabindex="-1">
+    <div id="resource-list" class="resource-list stack" role="region" aria-label="Resources"></div>
+    <div id="details" style="display:none" class="details">
+      <div id="details-columns" class="details-columns">
+        <div id="details-main" class="details-main stack">
+          <h2 id="details-title"></h2>
+          <p id="details-description"></p>
+          <h3 class="section-heading">Request</h3>
+          <div id="request-format" class="request-format stack"></div>
+          <h3 class="section-heading">Responses</h3>
+          <div id="responses" class="stack"></div>
+        </div>
+        <div id="try-it" class="try-it stack">
+          <h3>Try It</h3>
+          <p>URL: <code id="try-it-url"></code></p>
+          <div id="try-it-params" class="stack"></div>
+          <p>Media type: <span id="try-it-media-type"></span></p>
+          <div id="try-it-body-section" class="stack"></div>
+          <button id="try-it-send" class="try-it-send" type="button"></button>
+          <div id="response" class="try-it-response stack" data-state="idle">
+            <h4>Response</h4>
+            <p>Status: <span id="response-status" class="response-status" aria-live="polite"></span></p>
+            <h4>Headers</h4>
+            <pre id="response-headers"></pre>
+            <h4>Body</h4>
+            <pre id="response-body" class="response-body"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="console.js"></script>
+</body>
+</html>
