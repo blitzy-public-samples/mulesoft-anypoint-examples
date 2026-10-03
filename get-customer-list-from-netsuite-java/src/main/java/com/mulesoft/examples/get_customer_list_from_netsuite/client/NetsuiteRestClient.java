@@ -46,8 +46,8 @@ import io.netty.handler.timeout.WriteTimeoutException;
  * <p>This is the only class of the project that calls NetSuite. Every call goes through
  * {@link #execute(String, Supplier)}, which applies the failure modes of D-020: one re-authenticated
  * retry after HTTP 401, no retry after HTTP 429, a token endpoint failure or a connectivity failure.
- * The {@code WebClient} carries no timeout, no retry operator and no connector customisation of its
- * own; the reactor-netty defaults apply (D-020).
+ * The {@code WebClient} carries no timeout and no retry operator, and its Reactor Netty connector does not
+ * resend a request whose connection is reset: each call makes exactly one attempt (D-020).
  *
  * <pre>{@code
  * SuiteQlQueryBuilder.SuiteQlRequest request = new SuiteQlQueryBuilder().customersByLastName("a");

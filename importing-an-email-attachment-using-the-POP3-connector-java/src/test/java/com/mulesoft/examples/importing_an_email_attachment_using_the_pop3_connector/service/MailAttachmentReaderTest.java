@@ -3,6 +3,7 @@ package com.mulesoft.examples.importing_an_email_attachment_using_the_pop3_conne
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,14 +47,17 @@ import com.mulesoft.examples.importing_an_email_attachment_using_the_pop3_connec
  * context, no mail server and no network. The selection tests build {@link MimeMessage} instances on a
  * {@link Session} created from empty {@link Properties}, write each one to bytes and read it back with
  * {@link MimeMessage#MimeMessage(Session, java.io.InputStream)}, and pass the parsed message to the
- * reader. The remaining tests pass Mockito mocks of {@link Message}, {@link Multipart} and
- * {@link BodyPart}; in the failure-translation tests among them a stubbed method throws
- * {@link MessagingException} or {@link IOException}.
+ * reader. The message and part builders are private static helpers of this class (D-004). The
+ * remaining tests pass Mockito mocks of {@link Message}, {@link Multipart} and {@link BodyPart}; in
+ * the failure-translation tests among them a stubbed method throws {@link MessagingException} or
+ * {@link IOException}.
  *
- * <p>The cases asserted are: one, two and zero attachments; a text body before the attachment; nested
- * {@code multipart/*} parts; disposition and file-name selection; transfer decoding with no charset
- * conversion and no trimming; a single-part message; and the translation of checked exceptions into
- * {@link IllegalStateException} and {@link UncheckedIOException}.
+ * <p>The cases asserted are: one, two and zero attachments; an inline text body before the
+ * attachment; nested {@code multipart/*} parts; disposition and file-name selection; transfer
+ * decoding with no charset conversion and no trimming; a single-part message; and the translation of
+ * checked exceptions into {@link IllegalStateException} and {@link UncheckedIOException}, each
+ * reached through {@link Message#getContent()} or a part read. The selection rule they pin is D-391;
+ * the case set is D-576.
  *
  * <p>These tests cover the {@code service} package under the JaCoCo LINE covered ratio rule of at
  * least 0.80 (D-049).
@@ -109,10 +113,15 @@ public class MailAttachmentReaderTest {
     @Test
     @DisplayName("An inline text body without a file name before the attachment is skipped")
     public void textBodyBeforeAttachmentIsSkippedAndAttachmentReturned() throws Exception {
+        MimeBodyPart body = textBody("Please find the orders attached.");
+        body.setDisposition(Part.INLINE);
         MimeMultipart content = new MimeMultipart();
-        content.addBodyPart(textBody("Please find the orders attached."));
+        content.addBodyPart(body);
         content.addBodyPart(octetStreamAttachment(REPORT_FILE_NAME, utf8(ORDERS_CSV)));
         MimeMessage parsed = roundTrip(messageWith(content));
+        BodyPart parsedBody = ((Multipart) parsed.getContent()).getBodyPart(0);
+        assertEquals(Part.INLINE, parsedBody.getDisposition());
+        assertNull(parsedBody.getFileName());
 
         byte[] attachment = reader.firstAttachment(parsed);
 
@@ -175,6 +184,9 @@ public class MailAttachmentReaderTest {
         content.addBodyPart(textBody("Body."));
         content.addBodyPart(part);
         MimeMessage parsed = roundTrip(messageWith(content));
+        BodyPart parsedPart = ((Multipart) parsed.getContent()).getBodyPart(1);
+        assertEquals(Part.INLINE, parsedPart.getDisposition());
+        assertEquals(REPORT_FILE_NAME, parsedPart.getFileName());
 
         byte[] attachment = reader.firstAttachment(parsed);
 
@@ -332,6 +344,7 @@ public class MailAttachmentReaderTest {
 
         assertEquals("Folder is not Open", thrown.getMessage());
         assertSame(failure, thrown.getCause());
+        verify(message).getContent();
     }
 
     @Test
@@ -346,6 +359,7 @@ public class MailAttachmentReaderTest {
 
         assertSame(failure, thrown.getCause());
         assertEquals("java.io.IOException: Connection reset", thrown.getMessage());
+        verify(message).getContent();
     }
 
     @Test

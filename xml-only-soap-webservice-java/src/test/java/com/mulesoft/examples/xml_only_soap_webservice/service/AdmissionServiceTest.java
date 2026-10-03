@@ -9,8 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -18,330 +18,451 @@ import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.Reader;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.Source;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
 
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.InOrder;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.Mockito;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.ws.client.WebServiceIOException;
-import org.springframework.ws.client.WebServiceTransportException;
-import org.springframework.ws.soap.SoapMessage;
-import org.springframework.ws.soap.client.SoapFaultClientException;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
+import org.xmlunit.builder.DiffBuilder;
+import org.xmlunit.builder.Input;
+import org.xmlunit.diff.Diff;
 
 import com.mulesoft.examples.xml_only_soap_webservice.client.EhrServiceClient;
 import com.mulesoft.examples.xml_only_soap_webservice.client.PatientServiceClient;
+import com.mulesoft.examples.xml_only_soap_webservice.mapper.AdmissionMapper;
+import com.mulesoft.examples.xml_only_soap_webservice.mapper.EhrMockMapper;
 
 /**
- * Unit tests of {@link AdmissionService}, the flow {@code admitPatientService} and its sub-flows
+ * Unit tests of {@link AdmissionService}: the flow {@code admitPatientService} and its sub-flows
  * {@code upsertPatient}, {@code invokePatientService}, {@code createEpisode} and {@code invokeEHRService} of
  * {@code xml-only-soap-webservice/src/main/app/Hospital_Admissions_SOA.xml} (lines 19-88, D-417).
  *
- * <p>{@link PatientServiceClient} and {@link EhrServiceClient} are Mockito mocks, and the service runs its own
- * {@code AdmissionMapper}; no Spring application context starts. The request is the {@code ns:admitSubject} Body
- * child of {@code original/message.xml}. The client answers are {@code upsertPatientResponse} and
- * {@code createEpisodeResponse} documents in the shape of {@code PatientService.wsdl}, {@code EHRService.wsdl} and
- * {@code SOA-Message-1.0.xsd}, parsed with a namespace-aware parser.
+ * <p>{@link PatientServiceClient} and {@link EhrServiceClient} are Mockito mocks created in the field
+ * declarations, the service runs its own {@link AdmissionMapper}, and no Spring application context starts;
+ * {@code @ActiveProfiles} only names the {@code test} profile. The request is the {@code ns:admitSubject} Body
+ * child of {@code original/message.xml}. The client answers are an {@code ns0:upsertPatientResponse} holding
+ * {@code ns1:PatientId} {@code P123}, the DW-44 {@code ns0:createEpisodeResponse} that {@link EhrMockMapper}
+ * writes for {@link #NOW}, and an {@code ns0:createEpisodeResponse} without {@code startDate} and
+ * {@code endDate}.
  *
- * <p>The tests assert the DOM elements each client receives, the order of the two client calls, the returned
- * {@code admitSubjectResponse} text, and the propagation of client and mapper exceptions.
+ * <p>The tests assert the order of the two client calls, the DW-40 and DW-41 elements each client receives,
+ * the DW-39 {@code ns0:admitSubjectResponse} the flow returns, the identity of the elements each sub-flow
+ * passes on and returns, and the propagation of client, mapper and parser exceptions. Both sides of every
+ * document comparison pass through one identity transformer and are compared by XMLUnit with whitespace
+ * ignored and namespace URIs and local names compared (D-049, D-050, D-556).
  */
-@ExtendWith(MockitoExtension.class)
-class AdmissionServiceTest {
+@ActiveProfiles("test")
+public class AdmissionServiceTest {
 
-    /** Namespace of the {@code ns0} message elements. */
-    private static final String NS0 = "http://www.mule-health.com/SOA/message/1.0";
+    /** Namespace of the SOA message elements ({@code ns0}, {@code ns}). */
+    private static final String MSG_NS = "http://www.mule-health.com/SOA/message/1.0";
 
-    /** Namespace of the {@code ns1} model elements. */
-    private static final String NS1 = "http://www.mule-health.com/SOA/model/1.0";
+    /** Namespace of the SOA model elements ({@code ns1}). */
+    private static final String MODEL_NS = "http://www.mule-health.com/SOA/model/1.0";
 
     /** Namespace of the SOAP 1.1 envelope of {@code original/message.xml}. */
-    private static final String SOAP_ENV = "http://schemas.xmlsoap.org/soap/envelope/";
+    private static final String SOAP_NS = "http://schemas.xmlsoap.org/soap/envelope/";
 
-    /** First line of every document the mapper returns. */
-    private static final String DECLARATION = "<?xml version='1.0' encoding='UTF-8'?>";
+    /** Fixed clock of the EHRService stub answer. */
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2015-03-01T10:15:30.123Z"), ZoneOffset.UTC);
+
+    /** The instant {@link EhrMockMapper} writes as {@code episodeId}, {@code startDate} and {@code endDate}. */
+    private static final OffsetDateTime NOW = OffsetDateTime.now(CLOCK);
 
     /** Feature that makes the parser reject any document type declaration. */
     private static final String DISALLOW_DOCTYPE_DECL = "http://apache.org/xml/features/disallow-doctype-decl";
 
-    /** The {@code PatientId} the PatientService stub answers with. */
-    private static final String PATIENT_ID = "2015-03-01T10:15:30.123Z";
+    /** The {@code ns1:PatientId} of the PatientService stub answer. */
+    private static final String PATIENT_ID = "P123";
 
-    /** The {@code episodeId}, {@code startDate} and {@code endDate} text the EHRService stub answers with. */
-    private static final String EPISODE_NOW = "2015-03-01T10:15:31.456Z";
+    /** Local names of the {@code ns1:Subject} children of {@code original/message.xml}, in document order. */
+    private static final List<String> SUBJECT_FIELDS = List.of("nationalId", "firstName", "lastName", "address1",
+            "address2", "address3", "nationality", "gender", "dateOfBirth");
 
-    /** The {@code Bill } element DW-39 writes after {@code ns1:Episode}, with its two leading spaces. */
-    private static final String BILL = "  <ns1:Bill  xmlns:ns1=\"" + NS1 + "\">\n"
-            + "    <costPerNight>100</costPerNight>\n"
-            + "    <initialStateEstimate>5</initialStateEstimate>\n"
-            + "    <runningTotal>500</runningTotal>\n"
-            + "    <status>ADMITTED</status>\n"
-            + "  </ns1:Bill >\n";
+    /** Texts of the {@code ns1:Subject} children of {@code original/message.xml}, in document order. */
+    private static final List<String> SUBJECT_VALUES = List.of("1234", "Nial", "Darbey", "Buenos Aires", "", "",
+            "Irish", "Male", "1970-08-07");
 
-    @Mock
-    private PatientServiceClient patientServiceClient;
+    /** Local names of the DW-39 {@code ns1:Episode} children when the EHRService Episode has both dates. */
+    private static final List<String> EPISODE_FIELDS_WITH_DATES =
+            List.of("episodeId", "PatientId", "admission", "startDate", "endDate", "care");
 
-    @Mock
-    private EhrServiceClient ehrServiceClient;
+    /** Local names of the DW-39 {@code ns1:Episode} children when the EHRService Episode has no date. */
+    private static final List<String> EPISODE_FIELDS_WITHOUT_DATES =
+            List.of("episodeId", "PatientId", "admission", "care");
 
-    @Captor
-    private ArgumentCaptor<Element> patientRequest;
+    /** Mock of the PatientService client (sub-flow {@code invokePatientService}). */
+    private final PatientServiceClient patientClient = Mockito.mock(PatientServiceClient.class);
 
-    @Captor
-    private ArgumentCaptor<Element> ehrRequest;
+    /** Mock of the EHRService client (sub-flow {@code invokeEHRService}). */
+    private final EhrServiceClient ehrClient = Mockito.mock(EhrServiceClient.class);
 
     /** The service under test. */
-    private AdmissionService service;
+    private final AdmissionService service = new AdmissionService(patientClient, ehrClient);
 
-    @BeforeEach
-    void createService() {
-        service = new AdmissionService(patientServiceClient, ehrServiceClient);
+    /**
+     * Asserts one admission of {@code original/message.xml}: the DW-40 {@code ns0:upsertPatient} is sent to the
+     * PatientService, then the DW-41 {@code ns0:createEpisode} with the returned {@code ns1:PatientId} to the
+     * EHRService, and the returned document is the DW-39 {@code ns0:admitSubjectResponse} of the EHRService
+     * answer.
+     *
+     * @throws Exception when a document cannot be read, parsed or serialised
+     */
+    @Test
+    @DisplayName("admitPatientService sends upsertPatient, then createEpisode, and returns admitSubjectResponse (DW-39, DW-40, DW-41)")
+    public void admitPatientServiceCallsPatientThenEhrAndReturnsAdmitSubjectResponse() throws Exception {
+        when(patientClient.invoke(any(Element.class))).thenReturn(patientResponse());
+        when(ehrClient.invoke(any(Element.class))).thenReturn(ehrResponse());
+
+        Source result = service.admitPatientService(admitSubject());
+
+        ArgumentCaptor<Element> patientCaptor = ArgumentCaptor.forClass(Element.class);
+        ArgumentCaptor<Element> ehrCaptor = ArgumentCaptor.forClass(Element.class);
+        InOrder inOrder = Mockito.inOrder(patientClient, ehrClient);
+        inOrder.verify(patientClient).invoke(patientCaptor.capture());
+        inOrder.verify(ehrClient).invoke(ehrCaptor.capture());
+        verifyNoMoreInteractions(patientClient, ehrClient);
+
+        Element upsertPatient = patientCaptor.getValue();
+        assertUpsertPatientOfMessageSubject(upsertPatient);
+        assertXmlEquals(normalise(new AdmissionMapper().toUpsertPatient(admitSubject())), toXml(upsertPatient));
+
+        Element createEpisode = ehrCaptor.getValue();
+        assertCreateEpisode(createEpisode, PATIENT_ID);
+        assertXmlEquals(normalise(new AdmissionMapper().toCreateEpisode(patientResponse())), toXml(createEpisode));
+
+        String response = toXml(result);
+        assertXmlEquals(normalise(new AdmissionMapper().toAdmitSubjectResponse(ehrResponse())), response);
+        assertAdmitSubjectResponse(parse(response), EPISODE_FIELDS_WITH_DATES, PATIENT_ID);
     }
 
     /**
-     * Asserts one admission of {@code original/message.xml}: {@code ns0:upsertPatient} with the request's
-     * {@code ns1:Subject} is posted to the PatientService, then {@code ns0:createEpisode} with the returned
-     * {@code ns1:PatientId} to the EHRService, and the returned {@code ns0:admitSubjectResponse} holds the
-     * {@code ns1:Episode} of the EHRService answer with {@code startDate}, {@code endDate} plus five days and the
-     * {@code Bill } element.
+     * Asserts the returned {@code ns0:admitSubjectResponse} is the DW-39 output for an EHRService
+     * {@code ns1:Episode} without {@code startDate} and {@code endDate}, and holds neither element.
      *
-     * @throws Exception when a document cannot be read or parsed
+     * @throws Exception when a document cannot be read, parsed or serialised
      */
     @Test
-    void admitPatientServicePostsUpsertPatientThenCreateEpisodeAndReturnsAdmitSubjectResponse() throws Exception {
-        when(patientServiceClient.invoke(any())).thenReturn(parse(upsertPatientResponse(PATIENT_ID)));
-        when(ehrServiceClient.invoke(any()))
-                .thenReturn(parse(createEpisodeResponse(PATIENT_ID, EPISODE_NOW, EPISODE_NOW)));
+    @DisplayName("admitPatientService omits startDate and endDate when the EHRService Episode has neither (DW-39)")
+    public void admitPatientServiceWithoutEpisodeDatesReturnsMapperOutput() throws Exception {
+        when(patientClient.invoke(any(Element.class))).thenReturn(patientResponse());
+        when(ehrClient.invoke(any(Element.class))).thenReturn(ehrResponseWithoutDates());
 
-        String response = textOf(service.admitPatientService(admitSubjectOfOriginalMessage()));
+        Source result = service.admitPatientService(admitSubject());
 
-        InOrder order = inOrder(patientServiceClient, ehrServiceClient);
-        order.verify(patientServiceClient).invoke(patientRequest.capture());
-        order.verify(ehrServiceClient).invoke(ehrRequest.capture());
-        verifyNoMoreInteractions(patientServiceClient, ehrServiceClient);
-        assertUpsertPatientOfOriginalSubject(patientRequest.getValue());
-        assertCreateEpisode(ehrRequest.getValue(), PATIENT_ID);
-        assertEquals(DECLARATION + "\n"
-                + "<ns0:admitSubjectResponse xmlns:ns0=\"" + NS0 + "\">\n"
-                + "  <ns1:Episode xmlns:ns1=\"" + NS1 + "\">\n"
-                + "    <episodeId>" + EPISODE_NOW + "</episodeId>\n"
-                + "    <ns1:PatientId>" + PATIENT_ID + "</ns1:PatientId>\n"
-                + "    <admission>Elective</admission>\n"
-                + "    <startDate>2015-03-01</startDate>\n"
-                + "    <endDate>2015-03-06</endDate>\n"
-                + "    <care>Private</care>\n"
-                + "  </ns1:Episode>\n"
-                + BILL
-                + "</ns0:admitSubjectResponse>", response);
+        ArgumentCaptor<Element> patientCaptor = ArgumentCaptor.forClass(Element.class);
+        ArgumentCaptor<Element> ehrCaptor = ArgumentCaptor.forClass(Element.class);
+        InOrder inOrder = Mockito.inOrder(patientClient, ehrClient);
+        inOrder.verify(patientClient).invoke(patientCaptor.capture());
+        inOrder.verify(ehrClient).invoke(ehrCaptor.capture());
+        verifyNoMoreInteractions(patientClient, ehrClient);
+        assertXmlEquals(normalise(new AdmissionMapper().toUpsertPatient(admitSubject())),
+                toXml(patientCaptor.getValue()));
+        assertXmlEquals(normalise(new AdmissionMapper().toCreateEpisode(patientResponse())),
+                toXml(ehrCaptor.getValue()));
 
+        String response = toXml(result);
+        assertXmlEquals(normalise(new AdmissionMapper().toAdmitSubjectResponse(ehrResponseWithoutDates())), response);
         Element admitSubjectResponse = parse(response);
-        assertQualifiedName(NS0, "admitSubjectResponse", admitSubjectResponse);
-        List<Element> children = elementChildren(admitSubjectResponse);
-        assertEquals(2, children.size());
-        assertQualifiedName(NS1, "Episode", children.get(0));
-        assertQualifiedName(NS1, "Bill", children.get(1));
+        assertAdmitSubjectResponse(admitSubjectResponse, EPISODE_FIELDS_WITHOUT_DATES, PATIENT_ID);
+        assertEquals(0, admitSubjectResponse.getElementsByTagNameNS("*", "startDate").getLength(), response);
+        assertEquals(0, admitSubjectResponse.getElementsByTagNameNS("*", "endDate").getLength(), response);
     }
 
     /**
-     * Asserts the returned {@code ns0:admitSubjectResponse} has no {@code startDate} and no {@code endDate} when
-     * the EHRService {@code ns1:Episode} carries neither.
-     *
-     * @throws Exception when a document cannot be read or parsed
-     */
-    @Test
-    void admitPatientServiceOmitsStartDateAndEndDateWhenEpisodeHasNone() throws Exception {
-        when(patientServiceClient.invoke(any())).thenReturn(parse(upsertPatientResponse(PATIENT_ID)));
-        when(ehrServiceClient.invoke(any())).thenReturn(parse(createEpisodeResponse(PATIENT_ID, null, null)));
-
-        String response = textOf(service.admitPatientService(admitSubjectOfOriginalMessage()));
-
-        assertEquals(DECLARATION + "\n"
-                + "<ns0:admitSubjectResponse xmlns:ns0=\"" + NS0 + "\">\n"
-                + "  <ns1:Episode xmlns:ns1=\"" + NS1 + "\">\n"
-                + "    <episodeId>" + EPISODE_NOW + "</episodeId>\n"
-                + "    <ns1:PatientId>" + PATIENT_ID + "</ns1:PatientId>\n"
-                + "    <admission>Elective</admission>\n"
-                + "    <care>Private</care>\n"
-                + "  </ns1:Episode>\n"
-                + BILL
-                + "</ns0:admitSubjectResponse>", response);
-    }
-
-    /**
-     * Asserts a {@code null} {@code admitSubject} posts {@code ns0:upsertPatient} holding an empty
-     * {@code ns1:Subject}, and the admission continues with the PatientService answer.
-     *
-     * @throws Exception when a document cannot be read or parsed
-     */
-    @Test
-    void admitPatientServicePostsEmptySubjectForNullAdmitSubject() throws Exception {
-        when(patientServiceClient.invoke(any())).thenReturn(parse(upsertPatientResponse(PATIENT_ID)));
-        when(ehrServiceClient.invoke(any()))
-                .thenReturn(parse(createEpisodeResponse(PATIENT_ID, EPISODE_NOW, EPISODE_NOW)));
-
-        String response = textOf(service.admitPatientService(null));
-
-        verify(patientServiceClient).invoke(patientRequest.capture());
-        verify(ehrServiceClient).invoke(ehrRequest.capture());
-        Element upsertPatient = patientRequest.getValue();
-        assertQualifiedName(NS0, "upsertPatient", upsertPatient);
-        List<Element> children = elementChildren(upsertPatient);
-        assertEquals(1, children.size());
-        assertQualifiedName(NS1, "Subject", children.get(0));
-        assertFalse(children.get(0).hasChildNodes(), "ns1:Subject has no child nodes");
-        assertCreateEpisode(ehrRequest.getValue(), PATIENT_ID);
-        assertTrue(response.contains("<ns1:PatientId>" + PATIENT_ID + "</ns1:PatientId>"), response);
-    }
-
-    /**
-     * Asserts {@code null} client answers reach the next mapper call: a {@code null} PatientService answer posts
-     * {@code ns0:createEpisode} with an empty {@code ns1:PatientId}, and a {@code null} EHRService answer returns
-     * an {@code ns1:Episode} of empty elements beside the {@code Bill } element.
-     *
-     * @throws Exception when a document cannot be read or parsed
-     */
-    @Test
-    void admitPatientServicePassesNullClientAnswersToTheNextMapper() throws Exception {
-        when(patientServiceClient.invoke(any())).thenReturn(null);
-        when(ehrServiceClient.invoke(any())).thenReturn(null);
-
-        String response = textOf(service.admitPatientService(admitSubjectOfOriginalMessage()));
-
-        verify(ehrServiceClient).invoke(ehrRequest.capture());
-        Element createEpisode = ehrRequest.getValue();
-        assertQualifiedName(NS0, "createEpisode", createEpisode);
-        List<Element> children = elementChildren(createEpisode);
-        assertEquals(1, children.size());
-        assertQualifiedName(NS1, "PatientId", children.get(0));
-        assertFalse(children.get(0).hasChildNodes(), "ns1:PatientId has no child nodes");
-        assertEquals(DECLARATION + "\n"
-                + "<ns0:admitSubjectResponse xmlns:ns0=\"" + NS0 + "\">\n"
-                + "  <ns1:Episode xmlns:ns1=\"" + NS1 + "\">\n"
-                + "    <episodeId/>\n"
-                + "    <ns1:PatientId/>\n"
-                + "    <admission/>\n"
-                + "    <care/>\n"
-                + "  </ns1:Episode>\n"
-                + BILL
-                + "</ns0:admitSubjectResponse>", response);
-    }
-
-    /**
-     * Asserts a SOAP fault from the PatientService reaches the caller as the same
-     * {@link SoapFaultClientException}, and the EHRService is not called.
+     * Asserts a PatientService failure reaches the caller as the same exception instance and the EHRService is
+     * not called.
      *
      * @throws Exception when the request cannot be read or parsed
      */
     @Test
-    void admitPatientServicePropagatesPatientServiceFaultWithoutCallingEhrService() throws Exception {
-        SoapMessage faultMessage = mock(SoapMessage.class);
-        when(faultMessage.getFaultReason()).thenReturn("Patient store unavailable");
-        SoapFaultClientException fault = new SoapFaultClientException(faultMessage);
-        when(patientServiceClient.invoke(any())).thenThrow(fault);
-        Element admitSubject = admitSubjectOfOriginalMessage();
-
-        SoapFaultClientException thrown =
-                assertThrows(SoapFaultClientException.class, () -> service.admitPatientService(admitSubject));
-
-        assertSame(fault, thrown);
-        assertEquals("Patient store unavailable", thrown.getMessage());
-        verifyNoInteractions(ehrServiceClient);
-    }
-
-    /**
-     * Asserts an I/O failure of the PatientService call reaches the caller as the same
-     * {@link WebServiceIOException}, and the EHRService is not called.
-     *
-     * @throws Exception when the request cannot be read or parsed
-     */
-    @Test
-    void admitPatientServicePropagatesPatientServiceIoFailureWithoutCallingEhrService() throws Exception {
-        WebServiceIOException failure = new WebServiceIOException("I/O error: Connection refused");
-        when(patientServiceClient.invoke(any())).thenThrow(failure);
-        Element admitSubject = admitSubjectOfOriginalMessage();
+    @DisplayName("admitPatientService rethrows the PatientService failure unchanged and does not call the EHRService")
+    public void admitPatientServicePropagatesPatientServiceFailure() throws Exception {
+        WebServiceIOException failure = new WebServiceIOException("PatientService unreachable");
+        when(patientClient.invoke(any(Element.class))).thenThrow(failure);
 
         WebServiceIOException thrown =
-                assertThrows(WebServiceIOException.class, () -> service.admitPatientService(admitSubject));
+                assertThrows(WebServiceIOException.class, () -> service.admitPatientService(admitSubject()));
 
         assertSame(failure, thrown);
-        verifyNoInteractions(ehrServiceClient);
+        verify(patientClient, times(1)).invoke(any(Element.class));
+        verifyNoMoreInteractions(patientClient);
+        verifyNoInteractions(ehrClient);
     }
 
     /**
-     * Asserts an HTTP error of the EHRService call reaches the caller as the same
-     * {@link WebServiceTransportException}, after one PatientService call.
+     * Asserts an EHRService failure reaches the caller as the same exception instance after exactly one
+     * PatientService call.
      *
      * @throws Exception when a document cannot be read or parsed
      */
     @Test
-    void admitPatientServicePropagatesEhrServiceTransportFailure() throws Exception {
-        WebServiceTransportException failure = new WebServiceTransportException("Internal Server Error [500]");
-        when(patientServiceClient.invoke(any())).thenReturn(parse(upsertPatientResponse(PATIENT_ID)));
-        when(ehrServiceClient.invoke(any())).thenThrow(failure);
-        Element admitSubject = admitSubjectOfOriginalMessage();
+    @DisplayName("admitPatientService rethrows the EHRService failure unchanged after one PatientService call")
+    public void admitPatientServicePropagatesEhrServiceFailure() throws Exception {
+        WebServiceIOException failure = new WebServiceIOException("EHRService unreachable");
+        when(patientClient.invoke(any(Element.class))).thenReturn(patientResponse());
+        when(ehrClient.invoke(any(Element.class))).thenThrow(failure);
 
-        WebServiceTransportException thrown =
-                assertThrows(WebServiceTransportException.class, () -> service.admitPatientService(admitSubject));
+        WebServiceIOException thrown =
+                assertThrows(WebServiceIOException.class, () -> service.admitPatientService(admitSubject()));
 
         assertSame(failure, thrown);
-        verify(patientServiceClient).invoke(any());
-        verify(ehrServiceClient).invoke(any());
-        verifyNoMoreInteractions(patientServiceClient, ehrServiceClient);
+        verify(patientClient, times(1)).invoke(any());
+        verify(ehrClient, times(1)).invoke(any());
+        verifyNoMoreInteractions(patientClient, ehrClient);
+    }
+
+    /**
+     * Asserts {@code upsertPatient} sends the DW-40 {@code ns0:upsertPatient} of {@code original/message.xml} to
+     * the PatientService as the document element of its own document, whitespace text nodes kept, and returns
+     * the PatientService answer as the same element.
+     *
+     * @throws Exception when a document cannot be read, parsed or serialised
+     */
+    @Test
+    @DisplayName("upsertPatient sends the DW-40 upsertPatient element to the PatientService and returns its answer")
+    public void upsertPatientSendsUpsertPatientRequestAndReturnsResponse() throws Exception {
+        Element stub = patientResponse();
+        when(patientClient.invoke(any(Element.class))).thenReturn(stub);
+
+        Element out = service.upsertPatient(admitSubject());
+
+        assertSame(stub, out);
+        ArgumentCaptor<Element> captor = ArgumentCaptor.forClass(Element.class);
+        verify(patientClient).invoke(captor.capture());
+        verifyNoMoreInteractions(patientClient);
+        verifyNoInteractions(ehrClient);
+        Element upsertPatient = captor.getValue();
+        assertUpsertPatientOfMessageSubject(upsertPatient);
+        assertXmlEquals(normalise(new AdmissionMapper().toUpsertPatient(admitSubject())), toXml(upsertPatient));
+        assertSame(upsertPatient, upsertPatient.getOwnerDocument().getDocumentElement());
+        Node first = upsertPatient.getFirstChild();
+        assertEquals(Node.TEXT_NODE, first.getNodeType());
+        assertEquals("\n  ", first.getNodeValue());
+    }
+
+    /**
+     * Asserts {@code invokePatientService} hands its element to {@link PatientServiceClient#invoke(Element)} as
+     * the same instance and returns the client's element as the same instance.
+     *
+     * @throws Exception when a document cannot be parsed
+     */
+    @Test
+    @DisplayName("invokePatientService passes its element to the PatientService client and returns the client's element")
+    public void invokePatientServicePassesRequestToClient() throws Exception {
+        Element req = upsertPatientRequest();
+        Element stub = patientResponse();
+        when(patientClient.invoke(same(req))).thenReturn(stub);
+
+        assertSame(stub, service.invokePatientService(req));
+
+        verify(patientClient).invoke(same(req));
+        verifyNoMoreInteractions(patientClient);
+        verifyNoInteractions(ehrClient);
+    }
+
+    /**
+     * Asserts {@code invokePatientService} returns {@code null} when the PatientService client returns
+     * {@code null}, its result for an empty response Body.
+     *
+     * @throws Exception when a document cannot be parsed
+     */
+    @Test
+    @DisplayName("invokePatientService returns null when the PatientService client returns null for an empty response Body")
+    public void invokePatientServiceReturnsNullForEmptyBody() throws Exception {
+        Element req = upsertPatientRequest();
+        when(patientClient.invoke(same(req))).thenReturn(null);
+
+        assertNull(service.invokePatientService(req));
+
+        verify(patientClient).invoke(same(req));
+        verifyNoMoreInteractions(patientClient);
+        verifyNoInteractions(ehrClient);
+    }
+
+    /**
+     * Asserts {@code createEpisode} sends the DW-41 {@code ns0:createEpisode} holding the {@code ns1:PatientId}
+     * of the given {@code ns0:upsertPatientResponse} to the EHRService, and returns the EHRService answer as the
+     * same element.
+     *
+     * @throws Exception when a document cannot be read, parsed or serialised
+     */
+    @Test
+    @DisplayName("createEpisode sends the DW-41 createEpisode element to the EHRService and returns its answer")
+    public void createEpisodeSendsCreateEpisodeRequestAndReturnsResponse() throws Exception {
+        Element stub = ehrResponse();
+        when(ehrClient.invoke(any(Element.class))).thenReturn(stub);
+
+        Element out = service.createEpisode(patientResponse());
+
+        assertSame(stub, out);
+        ArgumentCaptor<Element> captor = ArgumentCaptor.forClass(Element.class);
+        verify(ehrClient).invoke(captor.capture());
+        verifyNoMoreInteractions(ehrClient);
+        verifyNoInteractions(patientClient);
+        Element createEpisode = captor.getValue();
+        assertCreateEpisode(createEpisode, PATIENT_ID);
+        assertXmlEquals(normalise(new AdmissionMapper().toCreateEpisode(patientResponse())), toXml(createEpisode));
+    }
+
+    /**
+     * Asserts {@code invokeEhrService} hands its element to {@link EhrServiceClient#invoke(Element)} as the same
+     * instance and returns the client's element as the same instance.
+     *
+     * @throws Exception when a document cannot be parsed
+     */
+    @Test
+    @DisplayName("invokeEhrService passes its element to the EHRService client and returns the client's element")
+    public void invokeEhrServicePassesRequestToClient() throws Exception {
+        Element req = createEpisodeRequest();
+        Element stub = ehrResponse();
+        when(ehrClient.invoke(same(req))).thenReturn(stub);
+
+        assertSame(stub, service.invokeEhrService(req));
+
+        verify(ehrClient).invoke(same(req));
+        verifyNoMoreInteractions(ehrClient);
+        verifyNoInteractions(patientClient);
+    }
+
+
+    // The four tests below assert the D-417 branches of AdmissionService beyond the nine admission and
+    // sub-flow tests above (D-556).
+
+    /**
+     * Asserts a {@code null} {@code admitSubject}, the result of an empty request Body, sends a DW-40
+     * {@code ns0:upsertPatient} holding an empty {@code ns1:Subject}, and the admission continues with the
+     * PatientService answer.
+     *
+     * @throws Exception when a document cannot be read, parsed or serialised
+     */
+    @Test
+    @DisplayName("admitPatientService sends upsertPatient with an empty Subject for a null admitSubject and completes")
+    public void admitPatientServiceSendsEmptySubjectForNullAdmitSubject() throws Exception {
+        when(patientClient.invoke(any(Element.class))).thenReturn(patientResponse());
+        when(ehrClient.invoke(any(Element.class))).thenReturn(ehrResponse());
+
+        Source result = service.admitPatientService(null);
+
+        ArgumentCaptor<Element> patientCaptor = ArgumentCaptor.forClass(Element.class);
+        ArgumentCaptor<Element> ehrCaptor = ArgumentCaptor.forClass(Element.class);
+        InOrder inOrder = Mockito.inOrder(patientClient, ehrClient);
+        inOrder.verify(patientClient).invoke(patientCaptor.capture());
+        inOrder.verify(ehrClient).invoke(ehrCaptor.capture());
+        verifyNoMoreInteractions(patientClient, ehrClient);
+        Element upsertPatient = patientCaptor.getValue();
+        assertQualifiedName(MSG_NS, "upsertPatient", upsertPatient);
+        List<Element> children = childElements(upsertPatient);
+        assertEquals(1, children.size());
+        assertQualifiedName(MODEL_NS, "Subject", children.get(0));
+        assertFalse(children.get(0).hasChildNodes(), "ns1:Subject has no child nodes");
+        assertXmlEquals(normalise(new AdmissionMapper().toUpsertPatient(null)), toXml(upsertPatient));
+        assertCreateEpisode(ehrCaptor.getValue(), PATIENT_ID);
+        assertXmlEquals(normalise(new AdmissionMapper().toAdmitSubjectResponse(ehrResponse())), toXml(result));
+    }
+
+    /**
+     * Asserts {@code null} client results reach the next mapper call: a {@code null} PatientService answer sends a
+     * DW-41 {@code ns0:createEpisode} with an empty {@code ns1:PatientId}, and a {@code null} EHRService answer
+     * returns a DW-39 {@code ns1:Episode} of empty elements beside the {@code Bill } element.
+     *
+     * @throws Exception when a document cannot be read, parsed or serialised
+     */
+    @Test
+    @DisplayName("admitPatientService passes null client results to the next mapper and returns an empty Episode")
+    public void admitPatientServicePassesNullClientResultsToTheNextMapper() throws Exception {
+        when(patientClient.invoke(any(Element.class))).thenReturn(null);
+        when(ehrClient.invoke(any(Element.class))).thenReturn(null);
+
+        Source result = service.admitPatientService(admitSubject());
+
+        ArgumentCaptor<Element> ehrCaptor = ArgumentCaptor.forClass(Element.class);
+        InOrder inOrder = Mockito.inOrder(patientClient, ehrClient);
+        inOrder.verify(patientClient).invoke(any(Element.class));
+        inOrder.verify(ehrClient).invoke(ehrCaptor.capture());
+        verifyNoMoreInteractions(patientClient, ehrClient);
+        Element createEpisode = ehrCaptor.getValue();
+        assertQualifiedName(MSG_NS, "createEpisode", createEpisode);
+        List<Element> children = childElements(createEpisode);
+        assertEquals(1, children.size());
+        assertQualifiedName(MODEL_NS, "PatientId", children.get(0));
+        assertFalse(children.get(0).hasChildNodes(), "ns1:PatientId has no child nodes");
+        assertXmlEquals(normalise(new AdmissionMapper().toCreateEpisode(null)), toXml(createEpisode));
+
+        String response = toXml(result);
+        assertXmlEquals(normalise(new AdmissionMapper().toAdmitSubjectResponse(null)), response);
+        Element admitSubjectResponse = parse(response);
+        assertAdmitSubjectResponse(admitSubjectResponse, EPISODE_FIELDS_WITHOUT_DATES, "");
+        for (Element field : childElements(childElements(admitSubjectResponse).get(0))) {
+            assertFalse(field.hasChildNodes(), field.getLocalName() + " has no child nodes");
+        }
     }
 
     /**
      * Asserts a {@code startDate} of the EHRService answer that does not begin with an ISO date raises the DW-39
-     * {@link DateTimeParseException} to the caller.
+     * {@link DateTimeParseException} to the caller after both client calls.
      *
      * @throws Exception when a document cannot be read or parsed
      */
     @Test
-    void admitPatientServicePropagatesDateTimeParseExceptionForUnreadableStartDate() throws Exception {
-        when(patientServiceClient.invoke(any())).thenReturn(parse(upsertPatientResponse(PATIENT_ID)));
-        when(ehrServiceClient.invoke(any()))
-                .thenReturn(parse(createEpisodeResponse(PATIENT_ID, "not-a-date", EPISODE_NOW)));
-        Element admitSubject = admitSubjectOfOriginalMessage();
+    @DisplayName("admitPatientService rethrows the DW-39 DateTimeParseException for a startDate without an ISO date")
+    public void admitPatientServicePropagatesDw39DateTimeParseException() throws Exception {
+        when(patientClient.invoke(any(Element.class))).thenReturn(patientResponse());
+        when(ehrClient.invoke(any(Element.class))).thenReturn(parse("<ns0:createEpisodeResponse xmlns:ns0='"
+                + MSG_NS + "' xmlns:ns1='" + MODEL_NS + "'><ns1:Episode><episodeId>E1</episodeId>"
+                + "<ns1:PatientId>" + PATIENT_ID + "</ns1:PatientId><admission>Elective</admission>"
+                + "<startDate>not-a-date</startDate><care>Private</care></ns1:Episode>"
+                + "</ns0:createEpisodeResponse>"));
 
         DateTimeParseException thrown =
-                assertThrows(DateTimeParseException.class, () -> service.admitPatientService(admitSubject));
+                assertThrows(DateTimeParseException.class, () -> service.admitPatientService(admitSubject()));
 
         assertEquals("not-a-date", thrown.getParsedString());
+        verify(patientClient, times(1)).invoke(any(Element.class));
+        verify(ehrClient, times(1)).invoke(any(Element.class));
+        verifyNoMoreInteractions(patientClient, ehrClient);
     }
 
     /**
-     * Asserts DW-40 text that the namespace-aware parser rejects raises {@link IllegalStateException} carrying the
-     * parser's message and the parser exception as its cause, before any client call. The {@code admitSubject} is
-     * parsed without namespace awareness and holds the {@code Subject} child {@code x:y:nationalId}, which DW-40
-     * writes as {@code y:nationalId} with the prefix {@code y} unbound.
+     * Asserts DW-40 text that the namespace-aware parser rejects raises {@link IllegalStateException} carrying
+     * the parser's message and the parser exception as its cause, before any client call. The
+     * {@code admitSubject} is parsed without namespace awareness and holds the {@code Subject} child
+     * {@code x:y:nationalId}, which DW-40 writes as {@code y:nationalId} with the prefix {@code y} unbound.
      *
      * @throws Exception when the request cannot be parsed
      */
     @Test
-    void admitPatientServiceRaisesIllegalStateExceptionWhenDw40TextCannotBeParsed() throws Exception {
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        factory.setNamespaceAware(false);
-        factory.setFeature(DISALLOW_DOCTYPE_DECL, true);
-        Element admitSubject = factory.newDocumentBuilder()
-                .parse(new InputSource(new StringReader("<ns:admitSubject xmlns:ns=\"" + NS0 + "\" xmlns:ns1=\""
-                        + NS1 + "\"><ns1:Subject><x:y:nationalId>1234</x:y:nationalId></ns1:Subject>"
+    @DisplayName("admitPatientService raises IllegalStateException with the parser's message for unparsable DW-40 text")
+    public void admitPatientServiceRaisesIllegalStateExceptionWhenDw40TextCannotBeParsed() throws Exception {
+        Element admitSubject = secureFactory(false).newDocumentBuilder()
+                .parse(new InputSource(new StringReader("<ns:admitSubject xmlns:ns='" + MSG_NS + "' xmlns:ns1='"
+                        + MODEL_NS + "'><ns1:Subject><x:y:nationalId>1234</x:y:nationalId></ns1:Subject>"
                         + "</ns:admitSubject>")))
                 .getDocumentElement();
 
@@ -351,125 +472,140 @@ class AdmissionServiceTest {
         SAXException cause = assertInstanceOf(SAXException.class, thrown.getCause());
         assertEquals(cause.getMessage(), thrown.getMessage());
         assertTrue(thrown.getMessage().contains("y:nationalId"), thrown.getMessage());
-        verifyNoInteractions(patientServiceClient, ehrServiceClient);
+        verifyNoInteractions(patientClient, ehrClient);
+    }
+
+
+    /**
+     * Returns the PatientService stub answer: {@code ns0:upsertPatientResponse} holding {@code ns1:PatientId}
+     * {@code P123} in the model namespace, the element DW-41 selects as {@code ns1#PatientId}.
+     *
+     * @return the document element of a new document
+     * @throws Exception when the text cannot be parsed
+     */
+    private static Element patientResponse() throws Exception {
+        return parse("<ns0:upsertPatientResponse xmlns:ns0='" + MSG_NS + "' xmlns:ns1='" + MODEL_NS + "'>"
+                + "<ns1:PatientId>" + PATIENT_ID + "</ns1:PatientId></ns0:upsertPatientResponse>");
     }
 
     /**
-     * Asserts {@code upsertPatient} posts the DW-40 element as a namespace-aware DOM element with its whitespace
-     * text nodes kept, and returns the PatientService answer unchanged.
+     * Returns the EHRService stub answer: the DW-44 {@code ns0:createEpisodeResponse/ns1:Episode} that
+     * {@link EhrMockMapper#createEpisodeResponse(Element, OffsetDateTime)} writes for
+     * {@link #createEpisodeRequest()} and {@link #NOW}, with {@code startDate} and {@code endDate}.
      *
-     * @throws Exception when a document cannot be read or parsed
+     * @return the document element of a new document
+     * @throws Exception when the text cannot be parsed
      */
-    @Test
-    void upsertPatientPostsDw40ElementWithWhitespaceKeptAndReturnsPatientServiceAnswer() throws Exception {
-        Element answer = parse(upsertPatientResponse(PATIENT_ID));
-        when(patientServiceClient.invoke(any())).thenReturn(answer);
-
-        Element result = service.upsertPatient(admitSubjectOfOriginalMessage());
-
-        assertSame(answer, result);
-        verify(patientServiceClient).invoke(patientRequest.capture());
-        verifyNoInteractions(ehrServiceClient);
-        Element upsertPatient = patientRequest.getValue();
-        assertUpsertPatientOfOriginalSubject(upsertPatient);
-        Node first = upsertPatient.getFirstChild();
-        assertEquals(Node.TEXT_NODE, first.getNodeType());
-        assertEquals("\n  ", first.getNodeValue());
-        assertSame(upsertPatient, upsertPatient.getOwnerDocument().getDocumentElement());
+    private static Element ehrResponse() throws Exception {
+        return parse(new EhrMockMapper().createEpisodeResponse(createEpisodeRequest(), NOW));
     }
 
     /**
-     * Asserts {@code createEpisode} posts the DW-41 element {@code ns0:createEpisode} holding the
-     * {@code ns1:PatientId} of the given {@code upsertPatientResponse}, and returns the EHRService answer
-     * unchanged.
+     * Returns an EHRService stub answer {@code ns0:createEpisodeResponse/ns1:Episode} with {@code episodeId}
+     * {@code E1}, {@code ns1:PatientId} {@code P123}, {@code admission} {@code Elective} and {@code care}
+     * {@code Private}, and no {@code startDate} and no {@code endDate}.
      *
-     * @throws Exception when a document cannot be read or parsed
+     * @return the document element of a new document
+     * @throws Exception when the text cannot be parsed
      */
-    @Test
-    void createEpisodePostsDw41ElementAndReturnsEhrServiceAnswer() throws Exception {
-        Element answer = parse(createEpisodeResponse(PATIENT_ID, EPISODE_NOW, EPISODE_NOW));
-        when(ehrServiceClient.invoke(any())).thenReturn(answer);
-
-        Element result = service.createEpisode(parse(upsertPatientResponse(PATIENT_ID)));
-
-        assertSame(answer, result);
-        verify(ehrServiceClient).invoke(ehrRequest.capture());
-        verifyNoInteractions(patientServiceClient);
-        assertCreateEpisode(ehrRequest.getValue(), PATIENT_ID);
+    private static Element ehrResponseWithoutDates() throws Exception {
+        return parse("<ns0:createEpisodeResponse xmlns:ns0='" + MSG_NS + "' xmlns:ns1='" + MODEL_NS + "'>"
+                + "<ns1:Episode><episodeId>E1</episodeId><ns1:PatientId>" + PATIENT_ID + "</ns1:PatientId>"
+                + "<admission>Elective</admission><care>Private</care></ns1:Episode>"
+                + "</ns0:createEpisodeResponse>");
     }
 
     /**
-     * Asserts {@code invokePatientService} hands its body to {@link PatientServiceClient#invoke(Element)} as the
-     * same element and returns the client's answer as the same element.
+     * Returns an {@code ns0:upsertPatient} request holding an {@code ns1:Subject} with one {@code nationalId}.
      *
-     * @throws Exception when a document cannot be parsed
+     * @return the document element of a new document
+     * @throws Exception when the text cannot be parsed
      */
-    @Test
-    void invokePatientServicePassesBodyUnchangedAndReturnsClientAnswer() throws Exception {
-        Element body = parse("<ns0:getPatient xmlns:ns0=\"" + NS0 + "\" xmlns:ns1=\"" + NS1 + "\">"
-                + "<ns1:PatientId>" + PATIENT_ID + "</ns1:PatientId></ns0:getPatient>");
-        Element answer = parse(upsertPatientResponse(PATIENT_ID));
-        when(patientServiceClient.invoke(body)).thenReturn(answer);
-
-        assertSame(answer, service.invokePatientService(body));
-
-        verify(patientServiceClient).invoke(body);
-        verifyNoMoreInteractions(patientServiceClient);
-        verifyNoInteractions(ehrServiceClient);
+    private static Element upsertPatientRequest() throws Exception {
+        return parse("<ns0:upsertPatient xmlns:ns0='" + MSG_NS + "' xmlns:ns1='" + MODEL_NS + "'>"
+                + "<ns1:Subject><nationalId>1234</nationalId></ns1:Subject></ns0:upsertPatient>");
     }
 
     /**
-     * Asserts {@code invokeEhrService} hands its body to {@link EhrServiceClient#invoke(Element)} as the same
-     * element and returns the client's {@code null} answer for an empty response Body.
+     * Returns an {@code ns0:createEpisode} request holding {@code ns1:PatientId} {@code P123}.
      *
-     * @throws Exception when a document cannot be parsed
+     * @return the document element of a new document
+     * @throws Exception when the text cannot be parsed
      */
-    @Test
-    void invokeEhrServicePassesBodyUnchangedAndReturnsClientAnswer() throws Exception {
-        Element body = parse("<ns0:findEpisodes xmlns:ns0=\"" + NS0 + "\" xmlns:ns1=\"" + NS1 + "\">"
-                + "<ns1:PatientId>" + PATIENT_ID + "</ns1:PatientId></ns0:findEpisodes>");
-        when(ehrServiceClient.invoke(body)).thenReturn(null);
-
-        assertNull(service.invokeEhrService(body));
-
-        verify(ehrServiceClient).invoke(body);
-        verifyNoMoreInteractions(ehrServiceClient);
-        verifyNoInteractions(patientServiceClient);
+    private static Element createEpisodeRequest() throws Exception {
+        return parse("<ns0:createEpisode xmlns:ns0='" + MSG_NS + "' xmlns:ns1='" + MODEL_NS + "'>"
+                + "<ns1:PatientId>" + PATIENT_ID + "</ns1:PatientId></ns0:createEpisode>");
     }
 
     /**
-     * Asserts {@code element} is {@code ns0:upsertPatient} holding one {@code ns1:Subject} with the nine
-     * unqualified children of the {@code ns1:Subject} of {@code original/message.xml}, in document order.
+     * Asserts {@code element} is {@code ns0:upsertPatient} holding one {@code ns1:Subject} whose element children
+     * are the nine unqualified children of the {@code ns1:Subject} of {@code original/message.xml}, with their
+     * texts, in document order.
      *
-     * @param element the element posted to the PatientService
+     * @param element the element sent to the PatientService
      */
-    private static void assertUpsertPatientOfOriginalSubject(Element element) {
-        assertQualifiedName(NS0, "upsertPatient", element);
-        List<Element> children = elementChildren(element);
-        assertEquals(1, children.size());
+    private static void assertUpsertPatientOfMessageSubject(Element element) {
+        assertQualifiedName(MSG_NS, "upsertPatient", element);
+        List<Element> children = childElements(element);
+        assertEquals(1, children.size(), "element children of ns0:upsertPatient");
         Element subject = children.get(0);
-        assertQualifiedName(NS1, "Subject", subject);
-        List<String> fields = new ArrayList<>();
-        for (Element field : elementChildren(subject)) {
+        assertQualifiedName(MODEL_NS, "Subject", subject);
+        List<Element> fields = childElements(subject);
+        List<String> values = new ArrayList<>();
+        for (Element field : fields) {
             assertNull(field.getNamespaceURI(), "namespace of " + field.getLocalName());
-            fields.add(field.getLocalName() + "=" + field.getTextContent());
+            values.add(field.getTextContent());
         }
-        assertEquals(List.of("nationalId=1234", "firstName=Nial", "lastName=Darbey", "address1=Buenos Aires",
-                "address2=", "address3=", "nationality=Irish", "gender=Male", "dateOfBirth=1970-08-07"), fields);
+        assertEquals(SUBJECT_FIELDS, localNames(fields));
+        assertEquals(SUBJECT_VALUES, values);
     }
 
     /**
      * Asserts {@code element} is {@code ns0:createEpisode} holding one {@code ns1:PatientId} with the given text.
      *
-     * @param element the element posted to the EHRService
+     * @param element the element sent to the EHRService
      * @param patientId the expected {@code ns1:PatientId} text
      */
     private static void assertCreateEpisode(Element element, String patientId) {
-        assertQualifiedName(NS0, "createEpisode", element);
-        List<Element> children = elementChildren(element);
-        assertEquals(1, children.size());
-        assertQualifiedName(NS1, "PatientId", children.get(0));
+        assertQualifiedName(MSG_NS, "createEpisode", element);
+        List<Element> children = childElements(element);
+        assertEquals(1, children.size(), "element children of ns0:createEpisode");
+        assertQualifiedName(MODEL_NS, "PatientId", children.get(0));
         assertEquals(patientId, children.get(0).getTextContent());
+    }
+
+    /**
+     * Asserts {@code response} is {@code ns0:admitSubjectResponse} holding {@code ns1:Episode} and
+     * {@code ns1:Bill}: the Episode children have the given local names in order and its {@code ns1:PatientId}
+     * has the given text, and the Bill holds {@code costPerNight} {@code 100}, {@code initialStateEstimate}
+     * {@code 5}, {@code runningTotal} {@code 500} and {@code status} {@code ADMITTED}.
+     *
+     * @param response the returned document element
+     * @param episodeFields the expected local names of the Episode children
+     * @param patientId the expected {@code ns1:PatientId} text
+     */
+    private static void assertAdmitSubjectResponse(Element response, List<String> episodeFields, String patientId) {
+        assertQualifiedName(MSG_NS, "admitSubjectResponse", response);
+        List<Element> children = childElements(response);
+        assertEquals(2, children.size(), "element children of ns0:admitSubjectResponse");
+        Element episode = children.get(0);
+        assertQualifiedName(MODEL_NS, "Episode", episode);
+        List<Element> episodeChildren = childElements(episode);
+        assertEquals(episodeFields, localNames(episodeChildren));
+        Element episodePatientId = episodeChildren.get(episodeFields.indexOf("PatientId"));
+        assertQualifiedName(MODEL_NS, "PatientId", episodePatientId);
+        assertEquals(patientId, episodePatientId.getTextContent());
+
+        Element bill = children.get(1);
+        assertQualifiedName(MODEL_NS, "Bill", bill);
+        List<Element> billChildren = childElements(bill);
+        List<String> billValues = new ArrayList<>();
+        for (Element field : billChildren) {
+            billValues.add(field.getTextContent());
+        }
+        assertEquals(List.of("costPerNight", "initialStateEstimate", "runningTotal", "status"),
+                localNames(billChildren));
+        assertEquals(List.of("100", "5", "500", "ADMITTED"), billValues);
     }
 
     /**
@@ -486,106 +622,115 @@ class AdmissionServiceTest {
     }
 
     /**
-     * Returns the text of the {@link StreamSource} reader that {@code source} is asserted to be.
+     * Asserts two XML documents are similar under XMLUnit: whitespace-only text is ignored, a prefix-only
+     * difference is similar, and any difference of namespace URI, local name, attribute or text fails.
      *
-     * @param source the source returned by the service
-     * @return the full text of its reader
-     * @throws IOException when the reader fails
+     * @param expected the expected document text
+     * @param actual the actual document text
      */
-    private static String textOf(Source source) throws IOException {
-        StreamSource stream = assertInstanceOf(StreamSource.class, source);
-        Reader reader = stream.getReader();
-        assertNotNull(reader, "reader of the returned StreamSource");
-        StringWriter text = new StringWriter();
-        reader.transferTo(text);
-        return text.toString();
+    private static void assertXmlEquals(String expected, String actual) {
+        Diff d = DiffBuilder.compare(Input.fromString(expected))
+                .withTest(Input.fromString(actual))
+                .ignoreWhitespace()
+                .checkForSimilar()
+                .build();
+        assertFalse(d.hasDifferences(), d.toString());
     }
 
     /**
-     * Builds an {@code ns0:upsertPatientResponse} document holding one {@code ns1:PatientId}.
-     *
-     * @param patientId the {@code ns1:PatientId} text
-     * @return the document text
-     */
-    private static String upsertPatientResponse(String patientId) {
-        return "<ns0:upsertPatientResponse xmlns:ns0=\"" + NS0 + "\">"
-                + "<ns1:PatientId xmlns:ns1=\"" + NS1 + "\">" + patientId + "</ns1:PatientId>"
-                + "</ns0:upsertPatientResponse>";
-    }
-
-    /**
-     * Builds an {@code ns0:createEpisodeResponse/ns1:Episode} document with {@code episodeId}
-     * {@link #EPISODE_NOW}, the given {@code ns1:PatientId}, {@code admission} {@code Elective} and {@code care}
-     * {@code Private}.
-     *
-     * @param patientId the {@code ns1:PatientId} text
-     * @param startDate the {@code startDate} text, or {@code null} to omit the element
-     * @param endDate the {@code endDate} text, or {@code null} to omit the element
-     * @return the document text
-     */
-    private static String createEpisodeResponse(String patientId, String startDate, String endDate) {
-        return "<ns0:createEpisodeResponse xmlns:ns0=\"" + NS0 + "\">"
-                + "<ns1:Episode xmlns:ns1=\"" + NS1 + "\">"
-                + "<episodeId>" + EPISODE_NOW + "</episodeId>"
-                + "<ns1:PatientId>" + patientId + "</ns1:PatientId>"
-                + "<admission>Elective</admission>"
-                + (startDate == null ? "" : "<startDate>" + startDate + "</startDate>")
-                + (endDate == null ? "" : "<endDate>" + endDate + "</endDate>")
-                + "<care>Private</care>"
-                + "</ns1:Episode>"
-                + "</ns0:createEpisodeResponse>";
-    }
-
-    /**
-     * Reads classpath {@code /original/message.xml} with the namespace-aware parser and returns the first element
-     * child of its SOAP {@code Body}, asserted to be {@code admitSubject} in {@code NS0}.
+     * Reads classpath {@code original/message.xml} with the namespace-aware parser and returns the first element
+     * child of its {@code {SOAP_NS}Body}, asserted to be {@code admitSubject} in {@link #MSG_NS}.
      *
      * @return the {@code ns:admitSubject} element of the original request
      * @throws ParserConfigurationException when the parser cannot be configured
      * @throws SAXException when the resource is not well-formed
      * @throws IOException when the resource cannot be read
      */
-    private static Element admitSubjectOfOriginalMessage()
-            throws ParserConfigurationException, SAXException, IOException {
-        try (InputStream message = AdmissionServiceTest.class.getResourceAsStream("/original/message.xml")) {
-            assertNotNull(message, "classpath resource /original/message.xml");
-            Element envelope = namespaceAwareFactory().newDocumentBuilder().parse(message).getDocumentElement();
-            Element body = (Element) envelope.getElementsByTagNameNS(SOAP_ENV, "Body").item(0);
-            assertNotNull(body, "SOAP Body of /original/message.xml");
-            List<Element> bodyChildren = elementChildren(body);
+    private static Element admitSubject() throws ParserConfigurationException, SAXException, IOException {
+        try (InputStream message =
+                AdmissionServiceTest.class.getClassLoader().getResourceAsStream("original/message.xml")) {
+            assertNotNull(message, "classpath resource original/message.xml");
+            Element envelope = secureFactory(true).newDocumentBuilder().parse(message).getDocumentElement();
+            Element body = (Element) envelope.getElementsByTagNameNS(SOAP_NS, "Body").item(0);
+            assertNotNull(body, "{" + SOAP_NS + "}Body of original/message.xml");
+            List<Element> bodyChildren = childElements(body);
             assertFalse(bodyChildren.isEmpty(), "element child of the SOAP Body");
             Element admitSubject = bodyChildren.get(0);
-            assertQualifiedName(NS0, "admitSubject", admitSubject);
+            assertEquals(MSG_NS, admitSubject.getNamespaceURI(), "namespace of the SOAP Body child");
+            assertEquals("admitSubject", admitSubject.getLocalName(), "local name of the SOAP Body child");
             return admitSubject;
         }
     }
 
     /**
-     * Parses {@code xml} with a namespace-aware parser that rejects document type declarations.
+     * Parses {@code xml} with the namespace-aware parser and returns its document element.
      *
      * @param xml the document text
-     * @return the document element
+     * @return the document element of a new document
      * @throws ParserConfigurationException when the parser cannot be configured
      * @throws SAXException when the text is not well-formed or declares a document type
      * @throws IOException when the text cannot be read
      */
     private static Element parse(String xml) throws ParserConfigurationException, SAXException, IOException {
-        return namespaceAwareFactory().newDocumentBuilder()
+        return secureFactory(true).newDocumentBuilder()
                 .parse(new InputSource(new StringReader(xml)))
                 .getDocumentElement();
     }
 
     /**
-     * Creates a namespace-aware {@link DocumentBuilderFactory} with {@code disallow-doctype-decl} enabled.
+     * Creates a {@link DocumentBuilderFactory} that rejects document type declarations and expands neither
+     * XInclude nor entity references.
      *
+     * @param namespaceAware whether the parser is namespace-aware
      * @return a new factory
      * @throws ParserConfigurationException when the feature cannot be set
      */
-    private static DocumentBuilderFactory namespaceAwareFactory() throws ParserConfigurationException {
+    private static DocumentBuilderFactory secureFactory(boolean namespaceAware) throws ParserConfigurationException {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        factory.setNamespaceAware(true);
+        factory.setNamespaceAware(namespaceAware);
         factory.setFeature(DISALLOW_DOCTYPE_DECL, true);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
         return factory;
+    }
+
+    /**
+     * Serialises {@code source} with the JDK identity transformer, external DTD and stylesheet access disabled.
+     * A {@link StreamSource} is read once.
+     *
+     * @param source the document to serialise
+     * @return the serialised document text
+     * @throws TransformerException when the source cannot be read or serialised
+     */
+    private static String toXml(Source source) throws TransformerException {
+        TransformerFactory factory = TransformerFactory.newInstance();
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
+        StringWriter xml = new StringWriter();
+        factory.newTransformer().transform(source, new StreamResult(xml));
+        return xml.toString();
+    }
+
+    /**
+     * Serialises {@code element} and its subtree with {@link #toXml(Source)}.
+     *
+     * @param element the element to serialise
+     * @return the serialised element text
+     * @throws TransformerException when the element cannot be serialised
+     */
+    private static String toXml(Element element) throws TransformerException {
+        return toXml(new DOMSource(element));
+    }
+
+    /**
+     * Serialises mapper text with {@link #toXml(Source)}, the form every comparison applies to both sides.
+     *
+     * @param mapperText the XML text written by a mapper
+     * @return the serialised document text
+     * @throws TransformerException when the text cannot be parsed or serialised
+     */
+    private static String normalise(String mapperText) throws TransformerException {
+        return toXml(new StreamSource(new StringReader(mapperText)));
     }
 
     /**
@@ -594,7 +739,7 @@ class AdmissionServiceTest {
      * @param parent the parent element
      * @return its child elements
      */
-    private static List<Element> elementChildren(Element parent) {
+    private static List<Element> childElements(Element parent) {
         List<Element> children = new ArrayList<>();
         for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
             if (child.getNodeType() == Node.ELEMENT_NODE) {
@@ -602,5 +747,19 @@ class AdmissionServiceTest {
             }
         }
         return children;
+    }
+
+    /**
+     * Returns the local names of {@code elements}, in order.
+     *
+     * @param elements the elements
+     * @return their local names
+     */
+    private static List<String> localNames(List<Element> elements) {
+        List<String> names = new ArrayList<>();
+        for (Element element : elements) {
+            names.add(element.getLocalName());
+        }
+        return names;
     }
 }

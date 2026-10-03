@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
@@ -153,10 +154,14 @@ class ValidationServiceTest {
         assertThat(e.getCause()).isSameAs(thrown);
     }
 
+    // The null case is a null request body, parsed as an empty body (D-394, D-584).
     @ParameterizedTest
+    @NullSource
     @ValueSource(strings = {"{not json", "", "[]", "5"})
     void malformedOrNonObjectBodyFailsBeforeValidation(String body) {
-        Throwable thrown = catchThrowable(() -> service.choiceErrorHandlingFlow1(body.getBytes(StandardCharsets.UTF_8)));
+        byte[] bytes = body == null ? null : body.getBytes(StandardCharsets.UTF_8);
+
+        Throwable thrown = catchThrowable(() -> service.choiceErrorHandlingFlow1(bytes));
 
         assertThat(thrown)
                 .isNotNull()

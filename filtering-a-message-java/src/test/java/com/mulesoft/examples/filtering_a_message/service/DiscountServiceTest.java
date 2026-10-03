@@ -2,6 +2,7 @@ package com.mulesoft.examples.filtering_a_message.service;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -43,15 +44,20 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Unit tests of {@link DiscountService#filteringFlow1(InboundHttpRequest)}, the port of flow
- * {@code filteringFlow1} [filtering-a-message/src/main/app/filtering.xml:4-19] (D-437), with JUnit 5
- * and Mockito and no Spring application context (D-057).
+ * {@code filteringFlow1} [filtering-a-message/src/main/app/filtering.xml:4-19] (D-437), and of its
+ * and-filter helpers {@code payloadTypeAccepted} (filtering.xml:10) and {@code methodAccepted}
+ * (filtering.xml:11), with JUnit 5 and Mockito and no Spring application context (D-057, D-562).
+ *
+ * <p>Each request is internally consistent: its {@code Content-Length} is the body length, or
+ * {@code -1} for a chunked or {@code null} body.
  *
  * <p>The service is built in three ways:
  * <ul>
  *   <li>on Mockito mocks of {@link DiscountRequestMapper} and {@link FreeMembershipDiscountFilter},
- *       for the and-filter of filtering.xml:9-12, the order of the flow steps and the propagation of
- *       collaborator exceptions; a Mockito spy of this service records the order in which the
- *       and-filter evaluates its two filters;</li>
+ *       for the and-filter of filtering.xml:9-12 through {@code filteringFlow1} and through its two
+ *       helpers called directly, the order of the flow steps and the propagation of collaborator
+ *       exceptions; a Mockito spy of this service records the order in which the and-filter
+ *       evaluates its two filters;</li>
  *   <li>on the real collaborators, for the granted and rejected outcomes of the original request
  *       bodies {@code original/message.json} and {@code original/message1.json} and for the
  *       exceptions raised by malformed, {@code null} and incomplete JSON documents;</li>
@@ -72,6 +78,9 @@ public class DiscountServiceTest {
 
     /** A JSON request body that the custom filter grants: 2000 purchases over 12 months, membership free. */
     private static final String GRANTED_JSON = "{\"purchases\": 2000, \"months\": 12, \"membership\": \"free\"}";
+
+    /** A JSON request body that the custom filter rejects: 100 purchases over 6 months, membership free. */
+    private static final String DENIED_JSON = "{\"purchases\": 100, \"months\": 6, \"membership\": \"free\"}";
 
     /** Mocked JSON-to-map step of filtering.xml:14. */
     @Mock
@@ -133,6 +142,41 @@ public class DiscountServiceTest {
     private static InboundHttpRequest request(String method, String transferEncoding, String contentType,
             byte[] body) {
         return new InboundHttpRequest(method, body == null ? -1 : body.length, transferEncoding, contentType, body);
+    }
+
+    /**
+     * Builds a request with an explicit {@code Content-Length}, {@code -1} for a chunked body.
+     *
+     * @param method the request method
+     * @param contentLength the {@code Content-Length} value, or {@code -1} when absent
+     * @param transferEncoding the {@code Transfer-Encoding} value, or {@code null} when absent
+     * @param contentType the {@code Content-Type} value, or {@code null} when absent
+     * @param body the body bytes
+     * @return the bound request
+     */
+    private static InboundHttpRequest request(String method, long contentLength, String transferEncoding,
+            String contentType, byte[] body) {
+        return new InboundHttpRequest(method, contentLength, transferEncoding, contentType, body);
+    }
+
+    /**
+     * Builds the order map {@code {purchases=2000, months=12, membership=free}} of
+     * {@link #GRANTED_JSON}, with {@link Integer} numbers.
+     *
+     * @return a new mutable map
+     */
+    private static Map<String, Object> grantedOrder() {
+        return new HashMap<>(Map.of("purchases", 2000, "months", 12, "membership", "free"));
+    }
+
+    /**
+     * Builds the order map {@code {purchases=100, months=6, membership=free}} of
+     * {@link #DENIED_JSON}, with {@link Integer} numbers.
+     *
+     * @return a new mutable map
+     */
+    private static Map<String, Object> deniedOrder() {
+        return new HashMap<>(Map.of("purchases", 100, "months", 6, "membership", "free"));
     }
 
     /**
@@ -218,8 +262,9 @@ public class DiscountServiceTest {
 
     /**
      * Asserts a non-empty JSON {@code POST} whose {@code Transfer-Encoding}, trimmed, is
-     * {@code chunked} in any letter case fails the payload type filter of filtering.xml:10: the
-     * result is empty and the mapper and the custom filter are never called.
+     * {@code chunked} in any letter case, with {@code Content-Length} {@code -1}, fails the payload
+     * type filter of filtering.xml:10: the result is empty and the mapper and the custom filter are
+     * never called.
      *
      * @param transferEncoding the {@code Transfer-Encoding} value
      */
@@ -227,7 +272,7 @@ public class DiscountServiceTest {
     @ValueSource(strings = {"chunked", "CHUNKED", "Chunked", " chunked "})
     public void chunkedTransferEncodingIsFilteredInAnyLetterCase(String transferEncoding) {
         Optional<String> result = service.filteringFlow1(
-                request("POST", transferEncoding, "application/json", GRANTED_JSON.getBytes(UTF_8)));
+                request("POST", -1, transferEncoding, "application/json", GRANTED_JSON.getBytes(UTF_8)));
 
         assertEquals(Optional.empty(), result);
         verifyNoInteractions(mapper, filter);
@@ -329,25 +374,80 @@ public class DiscountServiceTest {
     }
 
     /**
-     * Asserts the payload type filter of filtering.xml:10 reads the body bytes and not the
-     * {@code Content-Length} value: a non-empty body with {@code Content-Length} {@code -1} (absent)
-     * passes and is granted, and an empty body with {@code Content-Length} {@code 25} is filtered;
-     * the mapper runs once, for the first request only.
+     * Asserts {@code payloadTypeAccepted} (filtering.xml:10) rejects a JSON {@code POST} whose
+     * {@code Content-Length} is {@code 0} and whose body is empty.
      */
     @Test
-    public void payloadTypeFilterReadsBodyBytesNotContentLength() {
-        byte[] body = GRANTED_JSON.getBytes(UTF_8);
-        stubGranted(body);
+    public void payloadTypeRejectsEmptyBody() {
+        assertFalse(service.payloadTypeAccepted(request("POST", null, "application/json", new byte[0])));
+    }
 
-        Optional<String> withoutLength =
-                service.filteringFlow1(new InboundHttpRequest("POST", -1, null, "application/json", body));
-        Optional<String> emptyWithLength =
-                service.filteringFlow1(new InboundHttpRequest("POST", 25, null, "application/json", new byte[0]));
+    /**
+     * Asserts {@code payloadTypeAccepted} (filtering.xml:10) rejects a JSON body sent with
+     * {@code Transfer-Encoding: chunked} and {@code Content-Length} {@code -1}.
+     */
+    @Test
+    public void payloadTypeRejectsChunkedTransferEncoding() {
+        assertFalse(service.payloadTypeAccepted(
+                request("POST", -1, "chunked", "application/json", GRANTED_JSON.getBytes(UTF_8))));
+    }
 
-        assertEquals(Optional.of(GRANTED_TEXT), withoutLength);
-        assertEquals(Optional.empty(), emptyWithLength);
-        verify(mapper).toMap(body);
-        assertGrantedLogged();
+    /**
+     * Asserts {@code payloadTypeAccepted} (filtering.xml:10) rejects a JSON body sent with
+     * {@code Transfer-Encoding: CHUNKED} and {@code Content-Length} {@code -1}.
+     */
+    @Test
+    public void payloadTypeRejectsUpperCaseChunkedTransferEncoding() {
+        assertFalse(service.payloadTypeAccepted(
+                request("POST", -1, "CHUNKED", "application/json", GRANTED_JSON.getBytes(UTF_8))));
+    }
+
+    /**
+     * Asserts {@code payloadTypeAccepted} (filtering.xml:10) rejects a non-empty body with
+     * {@code Content-Type: multipart/form-data; boundary=x}.
+     */
+    @Test
+    public void payloadTypeRejectsMultipartFormData() {
+        assertFalse(service.payloadTypeAccepted(
+                request("POST", null, "multipart/form-data; boundary=x", GRANTED_JSON.getBytes(UTF_8))));
+    }
+
+    /**
+     * Asserts {@code payloadTypeAccepted} (filtering.xml:10) rejects a non-empty body with
+     * {@code Content-Type: application/x-www-form-urlencoded; charset=UTF-8}.
+     */
+    @Test
+    public void payloadTypeRejectsFormUrlencoded() {
+        assertFalse(service.payloadTypeAccepted(request("POST", null,
+                "application/x-www-form-urlencoded; charset=UTF-8", "purchases=2000".getBytes(UTF_8))));
+    }
+
+    /**
+     * Asserts {@code payloadTypeAccepted} (filtering.xml:10) accepts a non-empty body with
+     * {@code Content-Type: application/json}.
+     */
+    @Test
+    public void payloadTypeAcceptsJsonBody() {
+        assertTrue(service.payloadTypeAccepted(
+                request("POST", null, "application/json", GRANTED_JSON.getBytes(UTF_8))));
+    }
+
+    /**
+     * Asserts {@code payloadTypeAccepted} (filtering.xml:10) accepts a non-empty body with no
+     * {@code Content-Type}.
+     */
+    @Test
+    public void payloadTypeAcceptsBodyWithoutContentType() {
+        assertTrue(service.payloadTypeAccepted(request("POST", null, null, GRANTED_JSON.getBytes(UTF_8))));
+    }
+
+    /**
+     * Asserts {@code payloadTypeAccepted} (filtering.xml:10) accepts a non-empty body with
+     * {@code Content-Type: text/plain}.
+     */
+    @Test
+    public void payloadTypeAcceptsTextPlainBody() {
+        assertTrue(service.payloadTypeAccepted(request("POST", null, "text/plain", GRANTED_JSON.getBytes(UTF_8))));
     }
 
     /**
@@ -368,6 +468,20 @@ public class DiscountServiceTest {
         assertEquals(Optional.of(GRANTED_TEXT), result);
         assertGrantedLogged();
     }
+
+    /**
+     * Asserts {@code methodAccepted} (filtering.xml:11, {@code http.method=post} with
+     * {@code caseSensitive="false"}) accepts the methods {@code post}, {@code POST} and {@code Post}.
+     */
+    @Test
+    public void methodAcceptsPostIgnoringCase() {
+        byte[] body = GRANTED_JSON.getBytes(UTF_8);
+
+        assertTrue(service.methodAccepted(request("post", null, "application/json", body)));
+        assertTrue(service.methodAccepted(request("POST", null, "application/json", body)));
+        assertTrue(service.methodAccepted(request("Post", null, "application/json", body)));
+    }
+
 
     /**
      * Asserts a non-empty JSON request whose method is not {@code POST}, or is {@code null}, fails the
@@ -434,7 +548,7 @@ public class DiscountServiceTest {
     @Test
     public void acceptedRequestRunsMapperThenFilterAndReturnsGrantedText() {
         byte[] body = GRANTED_JSON.getBytes(UTF_8);
-        Map<String, Object> order = new HashMap<>(Map.of("purchases", 2000, "months", 12, "membership", "free"));
+        Map<String, Object> order = grantedOrder();
         when(mapper.toMap(body)).thenReturn(order);
         when(filter.accept(order)).thenReturn(true);
 
@@ -449,21 +563,22 @@ public class DiscountServiceTest {
     }
 
     /**
-     * Asserts a custom filter of filtering.xml:15 that rejects the parsed map ends the flow with an
-     * empty result, after one mapper call and one filter call, and nothing is logged.
+     * Asserts a JSON {@code POST} of the denied body (100 purchases, 6 months, membership free), whose
+     * map the custom filter of filtering.xml:15 rejects, ends the flow with an empty result after one
+     * mapper call and one filter call, with the same instances, and nothing is logged.
      */
     @Test
     public void customFilterRejectionReturnsEmptyWithoutLogging() {
-        byte[] body = GRANTED_JSON.getBytes(UTF_8);
-        Map<String, Object> order = new HashMap<>();
+        byte[] body = DENIED_JSON.getBytes(UTF_8);
+        Map<String, Object> order = deniedOrder();
         when(mapper.toMap(body)).thenReturn(order);
         when(filter.accept(order)).thenReturn(false);
 
         Optional<String> result = service.filteringFlow1(request("POST", null, "application/json", body));
 
         assertEquals(Optional.empty(), result);
-        verify(mapper).toMap(body);
-        verify(filter).accept(order);
+        verify(mapper).toMap(same(body));
+        verify(filter).accept(same(order));
         assertNothingLogged();
     }
 
@@ -474,7 +589,7 @@ public class DiscountServiceTest {
     @Test
     public void mapperExceptionPropagatesUnchanged() {
         byte[] body = GRANTED_JSON.getBytes(UTF_8);
-        UncheckedIOException failure = new UncheckedIOException(new IOException("malformed body"));
+        UncheckedIOException failure = new UncheckedIOException(new IOException("bad json"));
         when(mapper.toMap(body)).thenThrow(failure);
         InboundHttpRequest request = request("POST", null, "application/json", body);
 
@@ -486,13 +601,33 @@ public class DiscountServiceTest {
     }
 
     /**
-     * Asserts the {@link NumberFormatException} the custom filter throws reaches the caller as the
-     * same instance and nothing is logged (D-437).
+     * Asserts the {@link NullPointerException} the custom filter throws for a map without
+     * {@code membership} reaches the caller as the same instance and nothing is logged (D-437).
+     */
+    @Test
+    public void filterNullPointerExceptionPropagatesUnchanged() {
+        byte[] body = "{\"purchases\": 2000, \"months\": 12}".getBytes(UTF_8);
+        Map<String, Object> order = new HashMap<>(Map.of("purchases", 2000, "months", 12));
+        NullPointerException failure = new NullPointerException("membership");
+        when(mapper.toMap(body)).thenReturn(order);
+        when(filter.accept(order)).thenThrow(failure);
+        InboundHttpRequest request = request("POST", null, "application/json", body);
+
+        NullPointerException thrown = assertThrows(NullPointerException.class, () -> service.filteringFlow1(request));
+
+        assertSame(failure, thrown);
+        assertNothingLogged();
+    }
+
+    /**
+     * Asserts the {@link NumberFormatException} the custom filter throws for a map whose
+     * {@code months} is {@code "abc"} reaches the caller as the same instance and nothing is logged
+     * (D-437).
      */
     @Test
     public void filterExceptionPropagatesUnchanged() {
-        byte[] body = GRANTED_JSON.getBytes(UTF_8);
-        Map<String, Object> order = new HashMap<>();
+        byte[] body = "{\"purchases\": 2000, \"months\": \"abc\", \"membership\": \"free\"}".getBytes(UTF_8);
+        Map<String, Object> order = new HashMap<>(Map.of("purchases", 2000, "months", "abc", "membership", "free"));
         NumberFormatException failure = new NumberFormatException("For input string: \"abc\"");
         when(mapper.toMap(body)).thenReturn(order);
         when(filter.accept(order)).thenThrow(failure);

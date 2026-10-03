@@ -45,9 +45,8 @@ import com.mulesoft.examples.importing_an_email_attachment_using_the_imap_connec
  * the bytes with {@code new MimeMessage(session, InputStream)} and read the parsed copy. The exception-translation
  * tests read {@link Message}s created with {@code Mockito.mock}.
  *
- * <p>The tests of {@code text/*} attachments compare the result with each CRLF replaced by LF; the line breaks of a
- * part serialised with quoted-printable transfer encoding arrive as CRLF. The {@code application/octet-stream}
- * attachments are compared exactly.
+ * <p>The tests of {@code text/*} attachments compare the result with each CRLF replaced by LF. The
+ * {@code application/octet-stream} attachments are compared exactly.
  *
  * <p>These tests cover the {@code service} package under the JaCoCo LINE covered ratio rule of at least 0.80
  * (D-049).

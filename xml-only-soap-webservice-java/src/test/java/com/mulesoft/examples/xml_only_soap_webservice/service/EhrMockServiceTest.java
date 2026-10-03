@@ -1,308 +1,277 @@
 package com.mulesoft.examples.xml_only_soap_webservice.service;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
 
 import java.io.IOException;
-import java.io.Reader;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.Source;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.context.ActiveProfiles;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
+import org.xmlunit.builder.DiffBuilder;
+import org.xmlunit.diff.Diff;
+
+import com.mulesoft.examples.xml_only_soap_webservice.mapper.EhrMockMapper;
 
 /**
  * Unit tests of {@link EhrMockService#ehrService(Element)}, the mock flow {@code EHRService} of
  * {@code xml-only-soap-webservice/src/main/app/mocks.xml} (lines 45-84).
  *
- * <p>The service runs its own {@code EhrMockMapper} over a {@link Clock}: a {@code Clock.fixed} value, or a
- * Mockito mock where a test counts the clock reads. No Spring application context starts. The requests are the
- * {@code createEpisode} and {@code findEpisodes} elements of {@code EHRService.wsdl} and
- * {@code SOA-Message-1.0.xsd}, other local names, a {@code null} element for an empty Body, and elements parsed
- * without namespace awareness.
+ * <p>The flow sets {@code operation} to the local name of the request root, {@code xpath('fn:local-name(/*)')}
+ * (:48), and runs one of two branches:
  *
- * <p>The tests assert the operation branch each request selects, the whole returned text of DW-44
- * {@code createEpisodeResponse} or DW-45 {@code findEpisodesResponse}, the names of the returned elements, one
- * clock read in the {@code createEpisode} branch and none in the {@code otherwise} branch.
+ * <ul>
+ *   <li>{@code when operation == 'createEpisode'} (:50): DW-44 (:52-66), an {@code ns0:createEpisodeResponse}
+ *       holding one {@code ns1:Episode} with {@code episodeId}, {@code startDate} and {@code endDate} set to
+ *       {@code now}, the request {@code ns1:PatientId}, {@code admission} {@code Elective} and {@code care}
+ *       {@code Private};</li>
+ *   <li>{@code otherwise} (:69): DW-45 (:71-80), an {@code ns0:findEpisodesResponse} holding one
+ *       {@code ns1:Episode} with the request {@code ns1:PatientId}, written as {@code <ns1:PatientId/>} when the
+ *       request has none.</li>
+ * </ul>
+ *
+ * <p>The service runs over a real {@link Clock#fixed(Instant, java.time.ZoneId) fixed} UTC clock, with no mock
+ * and no Spring application context; the {@code test} profile annotation starts none. Each test reads the
+ * returned {@link Source} once and serialises it with a JAXP identity transformer. It compares that text, with
+ * XMLUnit similarity and whitespace ignored, with the {@link EhrMockMapper} output for the same request passed
+ * through the same transformer, then checks the qualified names and the text of the returned elements. The class
+ * and its test methods are public (D-133); the test design is recorded as D-592.
  */
-@ExtendWith(MockitoExtension.class)
-class EhrMockServiceTest {
+@ActiveProfiles("test")
+public class EhrMockServiceTest {
 
     /** Namespace of the {@code ns0} message elements. */
-    private static final String NS0 = "http://www.mule-health.com/SOA/message/1.0";
+    private static final String MSG_NS = "http://www.mule-health.com/SOA/message/1.0";
 
     /** Namespace of the {@code ns1} model elements. */
-    private static final String NS1 = "http://www.mule-health.com/SOA/model/1.0";
+    private static final String MODEL_NS = "http://www.mule-health.com/SOA/model/1.0";
 
-    /** First line of every document the service returns. */
-    private static final String DECLARATION = "<?xml version='1.0' encoding='UTF-8'?>";
+    /** A namespace that is neither {@link #MSG_NS} nor {@link #MODEL_NS}. */
+    private static final String OTHER_NS = "urn:example:other";
 
-    /** Feature that makes the parser reject any document type declaration. */
-    private static final String DISALLOW_DOCTYPE_DECL = "http://apache.org/xml/features/disallow-doctype-decl";
+    /** The clock of the service under test: one fixed instant in UTC. */
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2015-03-01T10:15:30.123Z"), ZoneOffset.UTC);
 
-    /** The instant of every clock in these tests. */
-    private static final Instant NOW = Instant.parse("2015-03-01T10:15:30.123Z");
+    /** The {@code now} value the service reads from {@link #CLOCK}. */
+    private static final OffsetDateTime NOW = OffsetDateTime.now(CLOCK);
 
-    /** The text written for {@link #NOW} in UTC. */
+    /** The text DW-44 writes for {@link #NOW}. */
     private static final String NOW_TEXT = "2015-03-01T10:15:30.123Z";
 
-    /** The offset of the mocked clock. */
-    private static final ZoneOffset PLUS_TWO = ZoneOffset.ofHours(2);
+    /** Parser feature that rejects any document type declaration. */
+    private static final String DISALLOW_DOCTYPE_DECL = "http://apache.org/xml/features/disallow-doctype-decl";
 
-    /** The text written for {@link #NOW} in {@link #PLUS_TWO}. */
-    private static final String NOW_PLUS_TWO_TEXT = "2015-03-01T12:15:30.123+02:00";
-
-    /** The {@code ns1:PatientId} text of the requests. */
-    private static final String PATIENT_ID = "2015-03-01T10:15:29.987Z";
-
-    /** The {@code ns1:PatientId} line DW-44 and DW-45 write for {@link #PATIENT_ID}. */
-    private static final String PATIENT_ID_LINE = "<ns1:PatientId>" + PATIENT_ID + "</ns1:PatientId>";
-
-    /** The {@code ns1:PatientId} line DW-44 and DW-45 write when no qualified {@code PatientId} is selected. */
-    private static final String EMPTY_PATIENT_ID_LINE = "<ns1:PatientId/>";
-
-    /** The clock of the tests that count clock reads. */
-    @Mock
-    private Clock clock;
-
-    /** The service under test over a fixed UTC clock. */
-    private final EhrMockService service = new EhrMockService(Clock.fixed(NOW, ZoneOffset.UTC));
+    /** The service under test. */
+    private final EhrMockService service = new EhrMockService(CLOCK);
 
     /**
-     * Asserts an {@code ns0:createEpisode} request selects the {@code when} branch and returns DW-44
-     * {@code ns0:createEpisodeResponse} echoing its {@code ns1:PatientId}, with {@code now} as {@code episodeId},
-     * {@code startDate} and {@code endDate}.
+     * Asserts an {@code ns0:createEpisode} request takes the {@code when} branch (mocks.xml:50) and returns the
+     * DW-44 {@code ns0:createEpisodeResponse}: the request {@code ns1:PatientId} {@code P123}, {@code now} as
+     * {@code episodeId}, {@code startDate} and {@code endDate}, {@code admission} {@code Elective} and
+     * {@code care} {@code Private}.
      *
-     * @throws Exception when a document cannot be read or parsed
+     * @throws Exception when a document cannot be parsed or serialised
      */
     @Test
-    void createEpisodeReturnsCreateEpisodeResponseWithPatientIdAndNow() throws Exception {
-        String response = textOf(service.ehrService(parse(request("ns0", NS0, "createEpisode"))));
+    @DisplayName("createEpisode root returns createEpisodeResponse with the request PatientId (mocks.xml:50, DW-44)")
+    public void createEpisodeReturnsCreateEpisodeResponseWithRequestPatientId() throws Exception {
+        Element request = parse("<ns0:createEpisode xmlns:ns0=\"" + MSG_NS + "\" xmlns:ns1=\"" + MODEL_NS + "\">"
+                + "<ns1:PatientId>P123</ns1:PatientId></ns0:createEpisode>");
 
-        assertEquals(createEpisodeResponse(NOW_TEXT, PATIENT_ID_LINE), response);
-        Element root = parse(response);
-        assertQualifiedName(NS0, "createEpisodeResponse", root);
-        List<Element> children = elementChildren(root);
-        assertEquals(1, children.size());
-        assertQualifiedName(NS1, "Episode", children.get(0));
-        List<String> fields = new ArrayList<>();
-        for (Element field : elementChildren(children.get(0))) {
-            fields.add(field.getNodeName() + "=" + field.getTextContent());
-        }
-        assertEquals(List.of("episodeId=" + NOW_TEXT, "ns1:PatientId=" + PATIENT_ID, "admission=Elective",
-                "startDate=" + NOW_TEXT, "endDate=" + NOW_TEXT, "care=Private"), fields);
+        String response = toXml(service.ehrService(request));
+
+        assertXmlEquals(normalise(new EhrMockMapper().createEpisodeResponse(request, NOW)), response);
+        Element root = rootOf(response);
+        assertQualifiedName(MSG_NS, "createEpisodeResponse", root);
+        Element episode = qualifiedChild(root, MODEL_NS, "Episode");
+        assertEquals("P123", qualifiedChild(episode, MODEL_NS, "PatientId").getTextContent());
+        assertEquals(NOW_TEXT, childByLocalName(episode, "episodeId").getTextContent());
+        assertEquals("Elective", childByLocalName(episode, "admission").getTextContent());
+        assertEquals(NOW_TEXT, childByLocalName(episode, "startDate").getTextContent());
+        assertEquals(NOW_TEXT, childByLocalName(episode, "endDate").getTextContent());
+        assertEquals("Private", childByLocalName(episode, "care").getTextContent());
     }
 
     /**
-     * Asserts an {@code ns0:findEpisodes} request selects the {@code otherwise} branch, returns DW-45
-     * {@code ns0:findEpisodesResponse} echoing its {@code ns1:PatientId}, and does not read the clock.
+     * Asserts the branch test reads only the local name of the request root (mocks.xml:48): {@code createEpisode}
+     * in the namespace {@code urn:example:other} takes the {@code when} branch (mocks.xml:50) and returns the
+     * DW-44 {@code ns0:createEpisodeResponse} the mapper writes for the same request.
      *
-     * @throws Exception when a document cannot be read or parsed
+     * @throws Exception when a document cannot be parsed or serialised
      */
     @Test
-    void findEpisodesReturnsFindEpisodesResponseWithPatientIdWithoutReadingTheClock() throws Exception {
-        String response = textOf(new EhrMockService(clock).ehrService(parse(request("ns0", NS0, "findEpisodes"))));
+    @DisplayName("createEpisode root in another namespace takes the createEpisode branch (mocks.xml:48, DW-44)")
+    public void createEpisodeInOtherNamespaceTakesCreateEpisodeBranch() throws Exception {
+        Element request = parse("<other:createEpisode xmlns:other=\"" + OTHER_NS + "\" xmlns:ns1=\"" + MODEL_NS
+                + "\"><ns1:PatientId>P123</ns1:PatientId></other:createEpisode>");
+        assertQualifiedName(OTHER_NS, "createEpisode", request);
 
-        assertEquals(findEpisodesResponse(PATIENT_ID_LINE), response);
-        verifyNoInteractions(clock);
-        Element root = parse(response);
-        assertQualifiedName(NS0, "findEpisodesResponse", root);
-        List<Element> children = elementChildren(root);
-        assertEquals(1, children.size());
-        assertQualifiedName(NS1, "Episode", children.get(0));
-        List<Element> fields = elementChildren(children.get(0));
-        assertEquals(1, fields.size());
-        assertQualifiedName(NS1, "PatientId", fields.get(0));
-        assertEquals(PATIENT_ID, fields.get(0).getTextContent());
+        String response = toXml(service.ehrService(request));
+
+        assertXmlEquals(normalise(new EhrMockMapper().createEpisodeResponse(request, NOW)), response);
+        assertQualifiedName(MSG_NS, "createEpisodeResponse", rootOf(response));
     }
 
     /**
-     * Asserts a {@code null} request, the Body child of an empty Body, selects the {@code otherwise} branch,
-     * returns DW-45 {@code ns0:findEpisodesResponse} with {@code <ns1:PatientId/>}, and does not read the clock.
+     * Asserts an {@code ns0:findEpisodes} request takes the {@code otherwise} branch (mocks.xml:69) and returns the
+     * DW-45 {@code ns0:findEpisodesResponse} holding the request {@code ns1:PatientId} {@code P456}.
      *
-     * @throws Exception when the response cannot be read
+     * @throws Exception when a document cannot be parsed or serialised
      */
     @Test
-    void nullRequestReturnsFindEpisodesResponseWithEmptyPatientId() throws Exception {
-        assertEquals(findEpisodesResponse(EMPTY_PATIENT_ID_LINE), textOf(new EhrMockService(clock).ehrService(null)));
-        verifyNoInteractions(clock);
+    @DisplayName("findEpisodes root returns findEpisodesResponse with the request PatientId (mocks.xml:69, DW-45)")
+    public void findEpisodesReturnsFindEpisodesResponseWithRequestPatientId() throws Exception {
+        Element request = parse("<ns0:findEpisodes xmlns:ns0=\"" + MSG_NS + "\" xmlns:ns1=\"" + MODEL_NS + "\">"
+                + "<ns1:PatientId>P456</ns1:PatientId></ns0:findEpisodes>");
+
+        String response = toXml(service.ehrService(request));
+
+        assertXmlEquals(normalise(new EhrMockMapper().findEpisodesResponse(request)), response);
+        Element root = rootOf(response);
+        assertQualifiedName(MSG_NS, "findEpisodesResponse", root);
+        Element episode = qualifiedChild(root, MODEL_NS, "Episode");
+        assertEquals("P456", qualifiedChild(episode, MODEL_NS, "PatientId").getTextContent());
     }
 
     /**
-     * Asserts a request whose local name is neither {@code createEpisode} nor {@code findEpisodes} selects the
-     * {@code otherwise} branch and returns DW-45 {@code ns0:findEpisodesResponse} with {@code <ns1:PatientId/>}.
+     * Asserts a request root that is not {@code createEpisode}, here {@code ns0:getEpisode}, takes the
+     * {@code otherwise} branch (mocks.xml:69) and returns the DW-45 {@code ns0:findEpisodesResponse} whose
+     * {@code ns1:PatientId} element exists with empty text.
      *
-     * @throws Exception when a document cannot be read or parsed
+     * @throws Exception when a document cannot be parsed or serialised
      */
     @Test
-    void unknownOperationReturnsFindEpisodesResponseWithEmptyPatientId() throws Exception {
-        Element request = parse(request("ns0", NS0, "getEpisode"));
+    @DisplayName("other root returns findEpisodesResponse with an empty PatientId (mocks.xml:69, DW-45)")
+    public void otherRootReturnsFindEpisodesResponse() throws Exception {
+        Element request = parse("<ns0:getEpisode xmlns:ns0=\"" + MSG_NS + "\"/>");
 
-        assertEquals(findEpisodesResponse(EMPTY_PATIENT_ID_LINE),
-                textOf(new EhrMockService(clock).ehrService(request)));
-        verifyNoInteractions(clock);
+        String response = toXml(service.ehrService(request));
+
+        assertXmlEquals(normalise(new EhrMockMapper().findEpisodesResponse(request)), response);
+        Element root = rootOf(response);
+        assertQualifiedName(MSG_NS, "findEpisodesResponse", root);
+        Element episode = qualifiedChild(root, MODEL_NS, "Episode");
+        assertEquals("", qualifiedChild(episode, MODEL_NS, "PatientId").getTextContent());
     }
 
     /**
-     * Asserts the operation comparison is case-sensitive: {@code ns0:CreateEpisode} selects the {@code otherwise}
-     * branch and returns DW-45 {@code ns0:findEpisodesResponse} without reading the clock.
+     * Asserts a {@code null} request, the Body child of an empty SOAP Body, is answered without an exception by the
+     * {@code otherwise} branch: the DW-45 {@code ns0:findEpisodesResponse} holding one {@code ns1:Episode} whose
+     * {@code ns1:PatientId} is in the model namespace and has no child node once whitespace is ignored.
      *
-     * @throws Exception when a document cannot be read or parsed
+     * @throws Exception when a document cannot be parsed or serialised
      */
     @Test
-    void createEpisodeWithOtherCaseReturnsFindEpisodesResponse() throws Exception {
-        Element request = parse(request("ns0", NS0, "CreateEpisode"));
+    @DisplayName("null request returns findEpisodesResponse with an empty PatientId (DW-45)")
+    public void nullRequestReturnsEmptyPatientId() throws Exception {
+        Source source = assertDoesNotThrow(() -> service.ehrService(null));
 
-        assertEquals(findEpisodesResponse(EMPTY_PATIENT_ID_LINE),
-                textOf(new EhrMockService(clock).ehrService(request)));
-        verifyNoInteractions(clock);
+        String response = toXml(source);
+
+        assertXmlEquals(normalise(new EhrMockMapper().findEpisodesResponse(null)), response);
+        Element root = rootOf(response);
+        assertQualifiedName(MSG_NS, "findEpisodesResponse", root);
+        Element episode = qualifiedChild(root, MODEL_NS, "Episode");
+        Element patientId = qualifiedChild(episode, MODEL_NS, "PatientId");
+        assertQualifiedName(MODEL_NS, "PatientId", patientId);
+        assertEquals(List.of(), significantChildren(patientId), "child nodes of ns1:PatientId");
     }
 
     /**
-     * Asserts the namespace of the request is not read for the branch: {@code createEpisode} in namespace
-     * {@code urn:other} selects the {@code when} branch and returns DW-44 with {@code <ns1:PatientId/>}.
+     * Parses {@code xml} with a namespace-aware parser that rejects document type declarations, does not process
+     * XInclude and does not expand entity references.
      *
-     * @throws Exception when a document cannot be read or parsed
+     * @param xml the document text
+     * @return the document element
+     * @throws ParserConfigurationException when the parser cannot be configured
+     * @throws SAXException when the text is not well-formed or declares a document type
+     * @throws IOException when the text cannot be read
      */
-    @Test
-    void createEpisodeInOtherNamespaceReturnsCreateEpisodeResponseWithEmptyPatientId() throws Exception {
-        Element request = parse(request("other", "urn:other", "createEpisode"));
-
-        assertEquals(createEpisodeResponse(NOW_TEXT, EMPTY_PATIENT_ID_LINE), textOf(service.ehrService(request)));
+    private static Element parse(String xml) throws ParserConfigurationException, SAXException, IOException {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        factory.setFeature(DISALLOW_DOCTYPE_DECL, true);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+        return factory.newDocumentBuilder().parse(new InputSource(new StringReader(xml))).getDocumentElement();
     }
 
     /**
-     * Asserts a prefixed {@code ns0:createEpisode} parsed without namespace awareness, whose local name is
-     * {@code null}, selects the {@code when} branch by the node name after its {@code ':'} and returns DW-44 with
-     * {@code <ns1:PatientId/>}.
+     * Serialises {@code source} with a JAXP identity transformer whose external DTD and stylesheet access is empty.
+     * A {@link StreamSource} is consumed by this call.
      *
-     * @throws Exception when a document cannot be read or parsed
+     * @param source the source to serialise
+     * @return the serialised document text
+     * @throws TransformerException when the source cannot be read or serialised
      */
-    @Test
-    void prefixedCreateEpisodeWithoutNamespaceAwarenessReturnsCreateEpisodeResponse() throws Exception {
-        Element request = parseWithoutNamespaces(request("ns0", NS0, "createEpisode"));
-        assertNull(request.getLocalName());
-        assertEquals("ns0:createEpisode", request.getNodeName());
-
-        assertEquals(createEpisodeResponse(NOW_TEXT, EMPTY_PATIENT_ID_LINE), textOf(service.ehrService(request)));
+    private static String toXml(Source source) throws TransformerException {
+        assertNotNull(source, "source");
+        TransformerFactory factory = TransformerFactory.newInstance();
+        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
+        StringWriter xml = new StringWriter();
+        factory.newTransformer().transform(source, new StreamResult(xml));
+        return xml.toString();
     }
 
     /**
-     * Asserts an unprefixed {@code createEpisode} parsed without namespace awareness selects the {@code when}
-     * branch by its whole node name and returns DW-44 with {@code <ns1:PatientId/>}.
+     * Passes {@code text} through the identity transformer of {@link #toXml(Source)}.
      *
-     * @throws Exception when a document cannot be read or parsed
+     * @param text the document text, such as a mapper result
+     * @return the serialised document text
+     * @throws TransformerException when the text cannot be read or serialised
      */
-    @Test
-    void unprefixedCreateEpisodeWithoutNamespaceAwarenessReturnsCreateEpisodeResponse() throws Exception {
-        Element request = parseWithoutNamespaces("<createEpisode/>");
-        assertNull(request.getLocalName());
-
-        assertEquals(createEpisodeResponse(NOW_TEXT, EMPTY_PATIENT_ID_LINE), textOf(service.ehrService(request)));
+    private static String normalise(String text) throws TransformerException {
+        return toXml(new StreamSource(new StringReader(text)));
     }
 
     /**
-     * Asserts a prefixed {@code ns0:findEpisodes} parsed without namespace awareness selects the {@code otherwise}
-     * branch and returns DW-45 with {@code <ns1:PatientId/>}.
+     * Asserts that {@code actual} has no difference from {@code expected} beyond whitespace and the differences
+     * XMLUnit classifies as similar.
      *
-     * @throws Exception when a document cannot be read or parsed
+     * @param expected the expected document text
+     * @param actual the document text under test
      */
-    @Test
-    void prefixedFindEpisodesWithoutNamespaceAwarenessReturnsFindEpisodesResponse() throws Exception {
-        Element request = parseWithoutNamespaces(request("ns0", NS0, "findEpisodes"));
-        assertNull(request.getLocalName());
-
-        assertEquals(findEpisodesResponse(EMPTY_PATIENT_ID_LINE), textOf(service.ehrService(request)));
+    private static void assertXmlEquals(String expected, String actual) {
+        Diff diff = DiffBuilder.compare(expected).withTest(actual).ignoreWhitespace().checkForSimilar().build();
+        assertFalse(diff.hasDifferences(), diff.toString());
     }
 
     /**
-     * Asserts the {@code createEpisode} branch reads the clock once and writes {@code now} in the clock's offset
-     * {@code +02:00} as {@code episodeId}, {@code startDate} and {@code endDate}.
+     * Parses response text with {@link #parse(String)} and returns its document element.
      *
-     * @throws Exception when a document cannot be read or parsed
+     * @param xml the response text
+     * @return the root element of the response
+     * @throws ParserConfigurationException when the parser cannot be configured
+     * @throws SAXException when the text is not well-formed or declares a document type
+     * @throws IOException when the text cannot be read
      */
-    @Test
-    void createEpisodeReadsTheClockOnceAndWritesNowInItsOffset() throws Exception {
-        when(clock.instant()).thenReturn(NOW);
-        when(clock.getZone()).thenReturn(PLUS_TWO);
-
-        String response = textOf(new EhrMockService(clock).ehrService(parse(request("ns0", NS0, "createEpisode"))));
-
-        assertEquals(createEpisodeResponse(NOW_PLUS_TWO_TEXT, PATIENT_ID_LINE), response);
-        verify(clock).instant();
-        verify(clock).getZone();
-        verifyNoMoreInteractions(clock);
-    }
-
-    /**
-     * Builds a request element holding one {@code ns1:PatientId} with {@link #PATIENT_ID}.
-     *
-     * @param prefix the prefix of the root element
-     * @param namespaceUri the namespace bound to {@code prefix}
-     * @param localName the local name of the root element
-     * @return the request text
-     */
-    private static String request(String prefix, String namespaceUri, String localName) {
-        return "<" + prefix + ":" + localName + " xmlns:" + prefix + "=\"" + namespaceUri + "\" xmlns:ns1=\"" + NS1
-                + "\"><ns1:PatientId>" + PATIENT_ID + "</ns1:PatientId></" + prefix + ":" + localName + ">";
-    }
-
-    /**
-     * Returns the DW-44 {@code ns0:createEpisodeResponse} text.
-     *
-     * @param now the {@code episodeId}, {@code startDate} and {@code endDate} text
-     * @param patientIdLine the {@code ns1:PatientId} line
-     * @return the expected document text
-     */
-    private static String createEpisodeResponse(String now, String patientIdLine) {
-        return DECLARATION + "\n"
-                + "<ns0:createEpisodeResponse xmlns:ns0=\"" + NS0 + "\">\n"
-                + "  <ns1:Episode xmlns:ns1=\"" + NS1 + "\">\n"
-                + "    <episodeId>" + now + "</episodeId>\n"
-                + "    " + patientIdLine + "\n"
-                + "    <admission>Elective</admission>\n"
-                + "    <startDate>" + now + "</startDate>\n"
-                + "    <endDate>" + now + "</endDate>\n"
-                + "    <care>Private</care>\n"
-                + "  </ns1:Episode>\n"
-                + "</ns0:createEpisodeResponse>";
-    }
-
-    /**
-     * Returns the DW-45 {@code ns0:findEpisodesResponse} text.
-     *
-     * @param patientIdLine the {@code ns1:PatientId} line
-     * @return the expected document text
-     */
-    private static String findEpisodesResponse(String patientIdLine) {
-        return DECLARATION + "\n"
-                + "<ns0:findEpisodesResponse xmlns:ns0=\"" + NS0 + "\">\n"
-                + "  <ns1:Episode xmlns:ns1=\"" + NS1 + "\">\n"
-                + "    " + patientIdLine + "\n"
-                + "  </ns1:Episode>\n"
-                + "</ns0:findEpisodesResponse>";
+    private static Element rootOf(String xml) throws ParserConfigurationException, SAXException, IOException {
+        return parse(xml);
     }
 
     /**
@@ -314,84 +283,64 @@ class EhrMockServiceTest {
      */
     private static void assertQualifiedName(String namespaceUri, String localName, Element element) {
         assertNotNull(element, "{" + namespaceUri + "}" + localName);
-        assertEquals(namespaceUri, element.getNamespaceURI(), "namespace of " + element.getNodeName());
+        assertEquals(namespaceUri, element.getNamespaceURI(), "namespace URI of " + element.getNodeName());
         assertEquals(localName, element.getLocalName(), "local name of " + element.getNodeName());
     }
 
     /**
-     * Returns the text of the {@link StreamSource} reader that {@code source} is asserted to be.
-     *
-     * @param source the source returned by the service
-     * @return the full text of its reader
-     * @throws IOException when the reader fails
-     */
-    private static String textOf(Source source) throws IOException {
-        StreamSource stream = assertInstanceOf(StreamSource.class, source);
-        Reader reader = stream.getReader();
-        assertNotNull(reader, "reader of the returned StreamSource");
-        StringWriter text = new StringWriter();
-        reader.transferTo(text);
-        return text.toString();
-    }
-
-    /**
-     * Parses {@code xml} with a namespace-aware parser that rejects document type declarations.
-     *
-     * @param xml the document text
-     * @return the document element
-     * @throws ParserConfigurationException when the parser cannot be configured
-     * @throws SAXException when the text is not well-formed or declares a document type
-     * @throws IOException when the text cannot be read
-     */
-    private static Element parse(String xml) throws ParserConfigurationException, SAXException, IOException {
-        return parse(xml, true);
-    }
-
-    /**
-     * Parses {@code xml} with a parser without namespace awareness that rejects document type declarations.
-     *
-     * @param xml the document text
-     * @return the document element, whose nodes have no local name
-     * @throws ParserConfigurationException when the parser cannot be configured
-     * @throws SAXException when the text is not well-formed or declares a document type
-     * @throws IOException when the text cannot be read
-     */
-    private static Element parseWithoutNamespaces(String xml)
-            throws ParserConfigurationException, SAXException, IOException {
-        return parse(xml, false);
-    }
-
-    /**
-     * Parses {@code xml} with the given namespace awareness and {@code disallow-doctype-decl} enabled.
-     *
-     * @param xml the document text
-     * @param namespaceAware whether the parser is namespace aware
-     * @return the document element
-     * @throws ParserConfigurationException when the parser cannot be configured
-     * @throws SAXException when the text is not well-formed or declares a document type
-     * @throws IOException when the text cannot be read
-     */
-    private static Element parse(String xml, boolean namespaceAware)
-            throws ParserConfigurationException, SAXException, IOException {
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        factory.setNamespaceAware(namespaceAware);
-        factory.setFeature(DISALLOW_DOCTYPE_DECL, true);
-        return factory.newDocumentBuilder().parse(new InputSource(new StringReader(xml))).getDocumentElement();
-    }
-
-    /**
-     * Returns the element children of {@code parent} in document order.
+     * Returns the one child element of {@code parent} with the given namespace URI and local name, asserting that
+     * exactly one exists.
      *
      * @param parent the parent element
-     * @return its child elements
+     * @param namespaceUri the namespace URI of the child
+     * @param localName the local name of the child
+     * @return the matching child element
      */
-    private static List<Element> elementChildren(Element parent) {
-        List<Element> children = new ArrayList<>();
+    private static Element qualifiedChild(Element parent, String namespaceUri, String localName) {
+        List<Element> matches = new ArrayList<>();
         for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
-            if (child.getNodeType() == Node.ELEMENT_NODE) {
-                children.add((Element) child);
+            if (child instanceof Element element && namespaceUri.equals(element.getNamespaceURI())
+                    && localName.equals(element.getLocalName())) {
+                matches.add(element);
+            }
+        }
+        assertEquals(1, matches.size(), "children {" + namespaceUri + "}" + localName + " of " + parent.getNodeName());
+        return matches.get(0);
+    }
+
+    /**
+     * Returns the one child element of {@code parent} with the given local name in any namespace, asserting that
+     * exactly one exists.
+     *
+     * @param parent the parent element
+     * @param localName the local name of the child
+     * @return the matching child element
+     */
+    private static Element childByLocalName(Element parent, String localName) {
+        List<Element> matches = new ArrayList<>();
+        for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element element && localName.equals(element.getLocalName())) {
+                matches.add(element);
+            }
+        }
+        assertEquals(1, matches.size(), "children " + localName + " of " + parent.getNodeName());
+        return matches.get(0);
+    }
+
+    /**
+     * Returns the child nodes of {@code parent} other than text nodes that hold only whitespace.
+     *
+     * @param parent the parent node
+     * @return its remaining child nodes in document order
+     */
+    private static List<Node> significantChildren(Node parent) {
+        List<Node> children = new ArrayList<>();
+        for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child.getNodeType() != Node.TEXT_NODE || !child.getNodeValue().isBlank()) {
+                children.add(child);
             }
         }
         return children;
     }
 }
+
