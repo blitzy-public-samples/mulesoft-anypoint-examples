@@ -1,0 +1,9 @@
+http:
+  port: 0
+smtp:
+  host: 127.0.0.1
+  user: sender%40example.com
+  password: secret
+mail:
+  from: sender@example.com
+  to: receiver@example.com

@@ -1,0 +1,5 @@
+# D-012
+ftp:
+  host: TODO  # TODO: supply the FTP server host from upload-to-ftp-after-converting-json-to-xml/src/main/app/upload-to-ftp.xml:28
+  user: TODO  # TODO: supply the FTP user from upload-to-ftp-after-converting-json-to-xml/src/main/app/upload-to-ftp.xml:28
+  password: TODO  # TODO: supply the FTP password from upload-to-ftp-after-converting-json-to-xml/src/main/app/upload-to-ftp.xml:28

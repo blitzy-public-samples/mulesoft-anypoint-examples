@@ -1,0 +1,3 @@
+# Random server port for tests
+http:
+  port: 0
