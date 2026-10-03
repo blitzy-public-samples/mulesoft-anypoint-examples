@@ -84,7 +84,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
             </plugin>
 
-            <!-- Unit and endpoint tests; *IT classes run under failsafe -->
+            <!-- Unit and endpoint tests; *IT classes run under failsafe; JDK POST re-send off, D-020 D-633 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -92,10 +92,13 @@
                     <excludes>
                         <exclude>**/*IT.java</exclude>
                     </excludes>
+                    <systemPropertyVariables>
+                        <sun.net.http.retryPost>false</sun.net.http.retryPost>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
 
-            <!-- Tier 2B live-sandbox tests; skipped when application-it.yml is absent, D-021 -->
+            <!-- Tier 2B live-sandbox tests; skipped when application-it.yml is absent, D-021; JDK POST re-send off, D-633 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
@@ -103,6 +106,9 @@
                     <includes>
                         <include>**/*IT.java</include>
                     </includes>
+                    <systemPropertyVariables>
+                        <sun.net.http.retryPost>false</sun.net.http.retryPost>
+                    </systemPropertyVariables>
                 </configuration>
                 <executions>
                     <execution>

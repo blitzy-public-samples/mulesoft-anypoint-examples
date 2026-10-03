@@ -1,6 +1,7 @@
 package com.mulesoft.examples.processing_orders_with_dataweave_and_apikit.mapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -22,6 +23,7 @@ import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mulesoft.examples.processing_orders_with_dataweave_and_apikit.model.CurrencyRates;
 
@@ -33,13 +35,14 @@ import com.mulesoft.examples.processing_orders_with_dataweave_and_apikit.model.C
  *
  * <p>Each test calls a mapper created with {@code new}, with no Spring application context, on a
  * document parsed from the committed {@code input/orders.xml} or from synthetic XML, with the rates
- * of the committed {@code currency.json} or rates built from decimal strings, and asserts
+ * of the committed {@code currency.json} or rates built from decimal strings, and asserts the JSON
+ * text, or the tree Jackson reads from it with decimals as {@link BigDecimal}:
  * <ul>
  *   <li>the JSON of the committed sample equals the committed {@code original/orders.json};</li>
  *   <li>an item from 2004 is left out and an item from 2005 is written;</li>
  *   <li>repeated author texts are written once, in order of first occurrence (D-472);</li>
  *   <li>each price is the unrounded {@link BigDecimal} product with its scale kept;</li>
- *   <li>the prices of an item follow the order of the rate list;</li>
+ *   <li>the prices of every item follow the order of the rate list;</li>
  *   <li>no item after 2004 writes {@code {\n  "orders": []\n}} (D-472);</li>
  *   <li>an item without a {@code properties/title} element writes {@code "title": null} (D-472);</li>
  *   <li>a document element other than {@code orders} has no items and writes
@@ -57,8 +60,9 @@ public class OrderMapperTest {
     /** Matches one {@code price} member of the orders JSON and captures its number text. */
     private static final Pattern PRICE_MEMBER = Pattern.compile("\"price\": ([^,\\n]+),");
 
-    /** Matches one {@code currency} member of the orders JSON and captures its code. */
-    private static final Pattern CURRENCY_MEMBER = Pattern.compile("\"currency\": \"([^\"]*)\"");
+    /** JSON reader that binds decimal numbers as {@link BigDecimal}, with their written scale. */
+    private static final ObjectMapper JSON =
+            new ObjectMapper().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
 
     /** The mapper under test. */
     private final OrderMapper mapper = new OrderMapper();
@@ -85,24 +89,31 @@ public class OrderMapperTest {
     }
 
     /**
-     * Asserts that of two items from the years 2004 and 2005 only the 2005 item is written, with its
-     * title, its price 10 times the EUR ratio 0.92 and its author.
+     * Asserts that of the item {@code Before} from 2004 and the item {@code After} from 2005 only
+     * {@code After} is written: the {@code orders} array holds one element, titled {@code After},
+     * with its price 10 times the EUR ratio 0.92 and its author, and the text holds no
+     * {@code "title": "Before"}.
      *
-     * @throws Exception when the synthetic document cannot be parsed
+     * @throws Exception when the synthetic document or the written JSON cannot be parsed
      */
     @Test
     public void itemFromYear2004IsExcludedAndYear2005IsIncluded() throws Exception {
         Document orders = parse(orders(
-                item("Year 2004 Title", "10", "2004", "Author 2004"),
-                item("Year 2005 Title", "10", "2005", "Author 2005")));
+                item("Before", "10", "2004", "Author 2004"),
+                item("After", "10", "2005", "Author 2005")));
 
         String json = mapper.toOrdersJson(orders, rates(rate("EUR", "0.92")));
 
+        JsonNode written = tree(json).path("orders");
+        assertTrue(written.isArray(), "orders member is an array");
+        assertEquals(1, written.size(), "number of elements of the orders array");
+        assertEquals("After", written.path(0).path("title").asText(), "title of the one order written");
+        assertFalse(json.contains("\"title\": \"Before\""), "orders.json text without the 2004 title");
         assertEquals("""
                 {
                   "orders": [
                     {
-                      "title": "Year 2005 Title",
+                      "title": "After",
                       "prices": [
                         {
                           "price": 9.20,
@@ -120,10 +131,10 @@ public class OrderMapperTest {
     }
 
     /**
-     * Asserts the authors Kurt Cagle, Per Bothner and Kurt Cagle of one item are written as the two
-     * entries Kurt Cagle and Per Bothner, in that order (D-472).
+     * Asserts the authors Kurt Cagle, Per Bothner and Kurt Cagle of one item from 2005 are written as
+     * the two {@code authors} entries Kurt Cagle and Per Bothner, in that order (D-472).
      *
-     * @throws Exception when the synthetic document cannot be parsed
+     * @throws Exception when the synthetic document or the written JSON cannot be parsed
      */
     @Test
     public void duplicateAuthorsAreRemovedInFirstSeenOrder() throws Exception {
@@ -132,6 +143,10 @@ public class OrderMapperTest {
 
         String json = mapper.toOrdersJson(orders, rates(rate("EUR", "0.92")));
 
+        JsonNode authors = tree(json).path("orders").path(0).path("authors");
+        assertEquals(2, authors.size(), "number of authors entries");
+        assertEquals("Kurt Cagle", authors.path(0).path("author").asText(), "first authors entry");
+        assertEquals("Per Bothner", authors.path(1).path("author").asText(), "second authors entry");
         assertEquals("""
                 {
                   "orders": [
@@ -157,9 +172,10 @@ public class OrderMapperTest {
     }
 
     /**
-     * Asserts the items priced 30 and 29.99 with the rates EUR 0.92 and ARS 8.76 are written with the
-     * plain, unrounded products {@code 27.60}, {@code 262.80}, {@code 27.5908} and {@code 262.7124},
-     * in item and rate order.
+     * Asserts the items priced 30 and 29.99 from 2005 with the rates EUR 0.92, ARS 8.76 and GBP 0.66
+     * built from decimal strings are written with the plain, unrounded products {@code 27.60},
+     * {@code 262.80}, {@code 19.80}, {@code 27.5908}, {@code 262.7124} and {@code 19.7934}, in item
+     * and rate order.
      *
      * @throws Exception when the synthetic document cannot be parsed
      */
@@ -169,32 +185,44 @@ public class OrderMapperTest {
                 item("Everyday Italian", "30", "2005", "Giada De Laurentiis"),
                 item("Harry Potter", "29.99", "2005", "J K. Rowling")));
 
-        String json = mapper.toOrdersJson(orders, rates(rate("EUR", "0.92"), rate("ARS", "8.76")));
+        String json = mapper.toOrdersJson(orders, constructedRates());
 
         assertTrue(json.contains("\"price\": 27.60,"), "30 times 0.92 is written as 27.60");
         assertTrue(json.contains("\"price\": 27.5908,"), "29.99 times 0.92 is written as 27.5908");
         assertTrue(json.contains("\"price\": 262.80,"), "30 times 8.76 is written as 262.80");
-        assertEquals(List.of("27.60", "262.80", "27.5908", "262.7124"), matches(PRICE_MEMBER, json),
-                "price texts in item and rate order");
+        assertEquals(List.of("27.60", "262.80", "19.80", "27.5908", "262.7124", "19.7934"),
+                matches(PRICE_MEMBER, json), "price texts in item and rate order");
     }
 
     /**
-     * Asserts the prices of one item follow the rate order: EUR, ARS and GBP for the rates of the
-     * committed {@code currency.json}, and GBP, EUR and ARS for rates built in that order.
+     * Asserts the prices follow the rate order: every {@code prices} array of the committed
+     * {@code input/orders.xml} with the rates of the committed {@code currency.json} lists EUR, ARS
+     * and GBP, and the {@code prices} array of one item from 2005 with rates built as GBP, EUR and ARS
+     * lists GBP, EUR and ARS.
      *
-     * @throws Exception when a classpath resource or the synthetic document cannot be read or parsed
+     * @throws Exception when a classpath resource, the synthetic document or the written JSON cannot
+     *     be read or parsed
      */
     @Test
     public void ratesKeepInputOrder() throws Exception {
-        Document orders = parse(orders(item("Single Item", "10", "2005", "Single Author")));
+        Document sample;
+        try (InputStream in = open("input/orders.xml")) {
+            sample = parse(in);
+        }
+        Document single = parse(orders(item("Single Item", "10", "2005", "Single Author")));
 
-        String committed = mapper.toOrdersJson(orders, committedRates());
-        String constructed = mapper.toOrdersJson(orders,
-                rates(rate("GBP", "0.66"), rate("EUR", "0.92"), rate("ARS", "8.76")));
+        JsonNode committed = tree(mapper.toOrdersJson(sample, committedRates())).path("orders");
+        JsonNode constructed = tree(mapper.toOrdersJson(single,
+                rates(rate("GBP", "0.66"), rate("EUR", "0.92"), rate("ARS", "8.76")))).path("orders");
 
-        assertEquals(List.of("EUR", "ARS", "GBP"), matches(CURRENCY_MEMBER, committed),
-                "currency order for the rates of the committed currency.json");
-        assertEquals(List.of("GBP", "EUR", "ARS"), matches(CURRENCY_MEMBER, constructed),
+        assertEquals(2, committed.size(), "number of orders of the committed sample");
+        for (JsonNode order : committed) {
+            assertEquals(List.of("EUR", "ARS", "GBP"), currencies(order),
+                    "currency order of " + order.path("title").asText()
+                            + " for the rates of the committed currency.json");
+        }
+        assertEquals(1, constructed.size(), "number of orders of the single 2005 item");
+        assertEquals(List.of("GBP", "EUR", "ARS"), currencies(constructed.path(0)),
                 "currency order for rates built as GBP, EUR, ARS");
     }
 
@@ -273,11 +301,49 @@ public class OrderMapperTest {
      * @throws IOException when the resource cannot be read or bound
      */
     private static CurrencyRates committedRates() throws IOException {
-        ObjectMapper json = new ObjectMapper().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
-        CurrencyRates rates = json.readValue(resource("currency.json"), CurrencyRates.class);
+        CurrencyRates rates = JSON.readValue(resource("currency.json"), CurrencyRates.class);
         assertEquals(List.of(rate("EUR", "0.92"), rate("ARS", "8.76"), rate("GBP", "0.66")), rates.usd(),
                 "rates of the committed currency.json");
         return rates;
+    }
+
+    /**
+     * Builds the rates EUR 0.92, ARS 8.76 and GBP 0.66, in that order, each ratio read from its
+     * decimal string.
+     *
+     * @return the conversion rates
+     */
+    private static CurrencyRates constructedRates() {
+        return new CurrencyRates(List.of(
+                new CurrencyRates.Rate("EUR", new BigDecimal("0.92")),
+                new CurrencyRates.Rate("ARS", new BigDecimal("8.76")),
+                new CurrencyRates.Rate("GBP", new BigDecimal("0.66"))));
+    }
+
+    /**
+     * Reads {@code json} as a tree whose decimal numbers are {@link BigDecimal} values.
+     *
+     * @param json the JSON text
+     * @return the root node
+     * @throws IOException when the text is not well-formed JSON
+     */
+    private static JsonNode tree(String json) throws IOException {
+        return JSON.readTree(json);
+    }
+
+    /**
+     * Returns the {@code currency} text of each element of the {@code prices} array of
+     * {@code order}, in array order.
+     *
+     * @param order one element of the {@code orders} array
+     * @return the currency codes
+     */
+    private static List<String> currencies(JsonNode order) {
+        List<String> codes = new ArrayList<>();
+        for (JsonNode price : order.path("prices")) {
+            codes.add(price.path("currency").asText());
+        }
+        return codes;
     }
 
     /**

@@ -31,7 +31,8 @@ import org.yaml.snakeyaml.nodes.SequenceNode;
 /**
  * Enables a test class that carries {@link EnabledIfItCredentials} only when {@code application-it.yml}
  * on the test classpath holds every key the annotation lists with a value that is not blank and not
- * {@code TODO} (D-021).
+ * {@code TODO} (D-021). Every document of the file is read, a dotted key resolves as a literal entry or
+ * through nested mappings, and {@code TODO} matches in any letter case (D-658).
  */
 public final class ItCredentialsCondition implements ExecutionCondition {
 

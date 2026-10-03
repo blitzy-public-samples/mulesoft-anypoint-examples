@@ -47,7 +47,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *       {@code table already populated} and exactly one ERROR event carrying the failure's message
  *       and stack trace.</li>
  * </ul>
- * The tests cover every line of {@link DatabaseInitService} (D-049).
+ * The tests cover every line of {@link DatabaseInitService} (D-049). The class and its four
+ * {@code @Test} methods are public; the lifecycle methods are package-private (D-617).
  */
 @ExtendWith(MockitoExtension.class)
 public class DatabaseInitServiceTest {
@@ -80,9 +81,13 @@ public class DatabaseInitServiceTest {
     /** Level of {@link #serviceLogger} before the test. */
     private Level previousLevel;
 
-    /** Creates the service and attaches a started list appender to its logger at {@link Level#ALL}. */
+    /**
+     * Creates the service and attaches a started list appender to its logger at {@link Level#ALL}.
+     * Package-private, like {@link #tearDown()}: the public methods of this class are its four
+     * {@code @Test} methods (D-617).
+     */
     @BeforeEach
-    public void setUp() {
+    void setUp() {
         service = new DatabaseInitService(jdbcTemplate);
 
         serviceLogger = (Logger) LoggerFactory.getLogger(DatabaseInitService.class);
@@ -96,7 +101,7 @@ public class DatabaseInitServiceTest {
 
     /** Detaches and stops the list appender and restores the logger's previous level. */
     @AfterEach
-    public void tearDown() {
+    void tearDown() {
         serviceLogger.detachAppender(appender);
         appender.stop();
         serviceLogger.setLevel(previousLevel);

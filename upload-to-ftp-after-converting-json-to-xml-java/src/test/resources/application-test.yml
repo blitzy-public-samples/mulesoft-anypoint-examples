@@ -1,0 +1,9 @@
+# Account and upload settings for the in-JVM FakeFtpServer (D-012, D-039, D-645).
+# ftp.port is set per test class by @DynamicPropertySource.
+ftp:
+  host: localhost
+  user: tester
+  password: tester-password
+  path: /Upload/
+  output-pattern: muleExample.xml
+  response-timeout: 5000

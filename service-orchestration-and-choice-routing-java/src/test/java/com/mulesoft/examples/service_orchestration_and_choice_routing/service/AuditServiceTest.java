@@ -1,7 +1,7 @@
 package com.mulesoft.examples.service_orchestration_and_choice_routing.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
@@ -55,7 +55,10 @@ public class AuditServiceTest {
     /** Total value of one Samsung item of price 2550, {@code "0"} concatenated with {@code 2550} (D-473). */
     private static final String TOTAL_VALUE = "02550";
 
-    /** Template mock that receives the audit insert. */
+    /**
+     * Mock of the {@code namedParameterJdbcTemplate} bean that {@link AuditService} takes; it
+     * receives the audit insert as {@code update(String, Map)} with named parameters (D-475).
+     */
     @Mock
     private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
@@ -92,16 +95,18 @@ public class AuditServiceTest {
     }
 
     /**
-     * {@code auditService("12", "02550")} runs one {@code update(INSERT_AUDIT_SQL, parameters)} whose
-     * parameters are {@code orderId = "12"}, then {@code totalValue = "02550"}, and makes no other
-     * call on the template (D-475).
+     * {@code auditService("12", "02550")} runs one
+     * {@code update("insert into order_audits values(default, :orderId, :totalValue)", parameters)}
+     * whose parameters are {@code orderId = "12"}, then {@code totalValue = "02550"}, and makes no
+     * other call on the template (D-475).
      */
     @Test
     @DisplayName("Audit inserts the order id, then the total value, through one parameterized update")
     public void insertsOrderIdThenTotalValue() {
         service.auditService(ORDER_ID, TOTAL_VALUE);
 
-        verify(namedParameterJdbcTemplate).update(eq(AuditService.INSERT_AUDIT_SQL), parameters.capture());
+        verify(namedParameterJdbcTemplate).update(
+                eq("insert into order_audits values(default, :orderId, :totalValue)"), parameters.capture());
         verifyNoMoreInteractions(namedParameterJdbcTemplate);
         assertThat(parameters.getValue()).containsExactly(
                 entry(AuditService.ORDER_ID_PARAMETER, ORDER_ID),
@@ -138,12 +143,11 @@ public class AuditServiceTest {
         DataIntegrityViolationException failure = new DataIntegrityViolationException("insert failed");
         when(namedParameterJdbcTemplate.update(eq(AuditService.INSERT_AUDIT_SQL), anyMap())).thenThrow(failure);
 
-        Throwable thrown = catchThrowable(() -> service.auditService(ORDER_ID, TOTAL_VALUE));
-
-        assertThat(thrown)
+        assertThatThrownBy(() -> service.auditService(ORDER_ID, TOTAL_VALUE))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage(AuditService.EXPRESSION_FAILURE_MESSAGE)
-                .hasMessageContaining(AuditService.AUDIT_ROLLBACK_EXPRESSION);
-        assertThat(thrown.getCause()).isSameAs(failure);
+                .hasMessageContaining(AuditService.AUDIT_ROLLBACK_EXPRESSION)
+                .cause()
+                .isSameAs(failure);
     }
 }

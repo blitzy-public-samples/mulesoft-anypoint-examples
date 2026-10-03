@@ -1,0 +1,9 @@
+# In-JVM login check and requester form values (D-012)
+login:
+  username: mule
+  password: mule
+# Loopback target of the /requesterLogin requester on the test server port
+request:
+  http-request-config:
+    host: localhost
+    port: ${local.server.port}

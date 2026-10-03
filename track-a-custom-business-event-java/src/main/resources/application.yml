@@ -11,6 +11,8 @@ server:
 spring:
   application:
     name: track-a-custom-business-event-java
+  mvc:
+    dispatch-trace-request: true  # TRACE requests reach the handler mappings (D-629)
   web:
     resources:
       add-mappings: false

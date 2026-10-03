@@ -26,3 +26,6 @@ spring:
   web:
     resources:
       add-mappings: false
+  autoconfigure:
+    # /error is a path no listener serves, answered with the no-listener 404 (D-614)
+    exclude: org.springframework.boot.autoconfigure.web.servlet.error.ErrorMvcAutoConfiguration

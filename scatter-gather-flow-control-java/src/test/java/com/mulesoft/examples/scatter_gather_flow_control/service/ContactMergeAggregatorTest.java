@@ -62,7 +62,7 @@ class ContactMergeAggregatorTest {
     void oneFailure() {
         List<ContactMergeAggregator.RouteResult> results = List.of(
                 ContactMergeAggregator.RouteResult.success(sourceA()),
-                ContactMergeAggregator.RouteResult.failure(new IllegalArgumentException("route B")));
+                ContactMergeAggregator.RouteResult.failure(new RuntimeException("route B down")));
 
         assertThatThrownBy(() -> aggregator.aggregate(results))
                 .isExactlyInstanceOf(IllegalStateException.class)
@@ -75,8 +75,8 @@ class ContactMergeAggregatorTest {
     @Test
     void twoFailures() {
         List<ContactMergeAggregator.RouteResult> results = List.of(
-                ContactMergeAggregator.RouteResult.failure(new IllegalArgumentException("route A")),
-                ContactMergeAggregator.RouteResult.failure(new IllegalArgumentException("route B")));
+                ContactMergeAggregator.RouteResult.failure(new RuntimeException("route A down")),
+                ContactMergeAggregator.RouteResult.failure(new RuntimeException("route B down")));
 
         assertThatThrownBy(() -> aggregator.aggregate(results))
                 .isExactlyInstanceOf(IllegalStateException.class)
@@ -116,17 +116,17 @@ class ContactMergeAggregatorTest {
      */
     @Test
     void routeResultFactories() {
-        List<Map<String, String>> payload = sourceA();
-        Throwable failure = new IllegalArgumentException("route failed");
+        List<Map<String, String>> list = sourceA();
+        Throwable t = new RuntimeException("x");
 
-        ContactMergeAggregator.RouteResult successResult = ContactMergeAggregator.RouteResult.success(payload);
-        ContactMergeAggregator.RouteResult failureResult = ContactMergeAggregator.RouteResult.failure(failure);
+        ContactMergeAggregator.RouteResult successResult = ContactMergeAggregator.RouteResult.success(list);
+        ContactMergeAggregator.RouteResult failureResult = ContactMergeAggregator.RouteResult.failure(t);
 
         assertThat(successResult.isSuccess()).isTrue();
-        assertThat(successResult.payload()).isSameAs(payload);
+        assertThat(successResult.payload()).isSameAs(list);
         assertThat(successResult.failure()).isNull();
         assertThat(failureResult.isSuccess()).isFalse();
-        assertThat(failureResult.failure()).isSameAs(failure);
+        assertThat(failureResult.failure()).isSameAs(t);
         assertThat(failureResult.payload()).isNull();
     }
 

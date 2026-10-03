@@ -31,11 +31,14 @@ import org.junit.jupiter.api.Test;
  * the {@code message.json} fields [track-a-custom-business-event/src/test/resources/message.json] with
  * the item name and price per unit under test. The tests assert the discounted price text of the three
  * listed items, the reuse of the last discount by an unlisted item and the exception raised while none
- * is set (D-071), the string price read (D-479), the exceptions of malformed, empty, {@code null} and
- * incomplete bodies, and the tracker calls of each case. These tests cover the {@code service} package
- * under the JaCoCo LINE covered ratio rule of at least 0.80 (D-049).
+ * is set (D-071), the string price read (D-479), the exceptions of a malformed body, a {@code null}
+ * body, the JSON document {@code null}, a body without a price and a boolean, array or object price,
+ * and the tracker calls of each case. These tests cover the {@code service} package under the JaCoCo
+ * LINE covered ratio rule of at least 0.80 (D-049).
  *
- * <p>The class and its test methods are public; no test sets a {@code @DisplayName}.
+ * <p>The class and its test methods are public; no test sets a {@code @DisplayName}. The string-price,
+ * {@code null}-body and JSON-{@code null} cases assert the outcomes {@link PriceDiscountService}
+ * declares (D-479, D-638).
  */
 public class PriceDiscountServiceTest {
 
@@ -117,6 +120,7 @@ public class PriceDiscountServiceTest {
     @Test
     public void unlistedItemReusesLastDiscount() throws IOException {
         assertThat(service.customBusinessEventsFlow1(body("jeans", "10"))).isEqualTo("8.0");
+        verify(tracker, times(1)).track(any());
 
         assertThat(service.customBusinessEventsFlow1(body(UNLISTED_ITEM, "10"))).isEqualTo("8.0");
         verify(tracker, times(2)).track(any());

@@ -5,6 +5,7 @@ import java.time.Duration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.security.oauth2.client.AuthorizedClientServiceReactiveOAuth2AuthorizedClientManager;
@@ -21,7 +22,10 @@ import org.springframework.security.oauth2.client.web.reactive.function.client.S
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.util.Assert;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
 /**
@@ -145,7 +149,10 @@ public class DynamicsOAuth2Config {
      *
      * <p>It returns the stored token while it is valid and otherwise requests a new one from the registration's
      * token URI through {@code dynamicsHttpConnector}: the token request has the same connect and response
-     * timeouts as the Dataverse requests. It needs no {@code ServerWebExchange}.
+     * timeouts as the Dataverse requests. It needs no {@code ServerWebExchange}. A token response with HTTP
+     * {@code 429} fails the token request with {@code WebClientResponseException.TooManyRequests}, which carries
+     * the response's {@code Retry-After} header; every other token response is read as an OAuth 2.0 token
+     * response (D-020).
      *
      * @param repository              the repository holding the registration {@code dynamics}
      * @param authorizedClientService the store of the obtained token
@@ -159,7 +166,11 @@ public class DynamicsOAuth2Config {
             ReactorClientHttpConnector dynamicsHttpConnector) {
         WebClientReactiveClientCredentialsTokenResponseClient tokenClient =
                 new WebClientReactiveClientCredentialsTokenResponseClient();
-        tokenClient.setWebClient(WebClient.builder().clientConnector(dynamicsHttpConnector).build());
+        // A token response with HTTP 429 ends the token request as a vendor rate limit (D-020).
+        tokenClient.setWebClient(WebClient.builder()
+                .clientConnector(dynamicsHttpConnector)
+                .filter(ExchangeFilterFunction.ofResponseProcessor(DynamicsOAuth2Config::rateLimitedAsError))
+                .build());
 
         ReactiveOAuth2AuthorizedClientProvider provider = ReactiveOAuth2AuthorizedClientProviderBuilder.builder()
                 .clientCredentials(clientCredentials -> clientCredentials.accessTokenResponseClient(tokenClient))
@@ -205,5 +216,20 @@ public class DynamicsOAuth2Config {
                 .defaultHeader("OData-MaxVersion", ODATA_VERSION)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .build();
+    }
+
+    /**
+     * Turns a token response with HTTP {@code 429} into a failed request; passes every other response on
+     * unchanged (D-020).
+     *
+     * @param response the token endpoint response
+     * @return an error with the {@code WebClientResponseException.TooManyRequests} built from {@code response},
+     *     its headers and body included, for a {@code 429}; otherwise {@code response} itself
+     */
+    private static Mono<ClientResponse> rateLimitedAsError(ClientResponse response) {
+        if (response.statusCode().value() == HttpStatus.TOO_MANY_REQUESTS.value()) {
+            return response.createException().flatMap(Mono::error);
+        }
+        return Mono.just(response);
     }
 }

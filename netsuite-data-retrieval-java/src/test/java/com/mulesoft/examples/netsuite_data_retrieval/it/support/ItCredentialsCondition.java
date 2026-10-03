@@ -37,8 +37,9 @@ import org.yaml.snakeyaml.reader.UnicodeReader;
  * {@link EnabledIfItCredentials#keys()} resolves to a value that is neither blank nor {@code TODO}.
  * {@value #RESOURCE} is the git-ignored copy of the committed {@code application-it.example.yml} (D-012).
  *
- * <p>The condition uses no Spring type, and JUnit evaluates it before any Spring context is created: a disabled
- * class starts no application context and is reported as skipped with the returned reason. A reason names the
+ * <p>The condition uses no Spring type, and JUnit evaluates this class-level condition before
+ * {@code SpringExtension} creates the application context: a disabled class starts no application context,
+ * authenticates no client, runs no poller and is reported as skipped with the returned reason. A reason names the
  * file and at most one key, never a value read from the file.
  */
 public final class ItCredentialsCondition implements ExecutionCondition {
@@ -90,7 +91,7 @@ public final class ItCredentialsCondition implements ExecutionCondition {
      * Checks a {@value #RESOURCE} stream against the required keys (D-021).
      *
      * <p>The stream is read to its end through SnakeYAML's {@link UnicodeReader}, which detects a UTF-8, UTF-16BE
-     * or UTF-16LE byte order mark and otherwise decodes UTF-8; the stream is not closed. Only the first YAML
+     * or UTF-16LE byte order mark and otherwise decodes UTF-8 (D-616); the stream is not closed. Only the first YAML
      * document is composed and constructed, with SnakeYAML's {@link SafeConstructor}; later documents are neither
      * composed nor constructed. The checks run in this order, and the first failing one decides the result:
      * <ol>
@@ -100,11 +101,14 @@ public final class ItCredentialsCondition implements ExecutionCondition {
      *   <li>a key of a mapping in the first document reaches a mapping or a sequence that contains itself through
      *       an alias, such as {@code ? [&q {z: *q}]}: the file holds a recursive mapping key (D-352);</li>
      *   <li>constructing the first document throws, on a scalar that its explicit tag cannot convert, such as
-     *       {@code !!float abc}: the file is not valid YAML;</li>
-     *   <li>for each key in the given order: the key resolves to no entry, or to a mapping or a list, and is
-     *       missing; its value is {@code null} or blank; or its trimmed value is exactly {@code TODO}.</li>
+     *       {@code !!float abc}: the file is not valid YAML (D-616);</li>
+     *   <li>for each key in the given order: a key that resolves to no entry, or to a mapping or a list, is
+     *       missing; a key whose value is {@code null}, or whose string form is empty once
+     *       {@link String#trim() trimmed}, is blank; a key whose trimmed string form is exactly {@code TODO} is
+     *       {@code TODO}.</li>
      * </ol>
-     * The reasons of the second, third and fourth checks name only the file.
+     * Every reason names the file and at most the failing key, never a value read from the file; the reasons of the
+     * second, third and fourth checks name only the file.
      *
      * <p>A key resolves first as a literal entry of the current mapping, then, for each dot from left to right,
      * as the part before the dot naming a nested mapping in which the rest of the key resolves. The keys
@@ -144,11 +148,11 @@ public final class ItCredentialsCondition implements ExecutionCondition {
             if (value == NOT_RESOLVED || value instanceof Map<?, ?> || value instanceof Collection<?>) {
                 return ConditionEvaluationResult.disabled(RESOURCE + ": key " + key + " is missing");
             }
-            String text = value == null ? "" : String.valueOf(value);
-            if (text.isBlank()) {
+            String text = value == null ? "" : value.toString().trim();
+            if (text.isEmpty()) {
                 return ConditionEvaluationResult.disabled(RESOURCE + ": key " + key + " is blank");
             }
-            if (text.trim().equals("TODO")) {
+            if (text.equals("TODO")) {
                 return ConditionEvaluationResult.disabled(RESOURCE + ": key " + key + " is TODO");
             }
         }

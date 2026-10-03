@@ -1,0 +1,3 @@
+# Test profile: directory the greet3–greet6 file writes go to in tests.
+mel:
+  output-path: target/test-output/Path_of_your_choice

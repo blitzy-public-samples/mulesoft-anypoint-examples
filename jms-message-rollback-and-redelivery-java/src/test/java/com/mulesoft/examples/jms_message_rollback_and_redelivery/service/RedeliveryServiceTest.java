@@ -2,6 +2,7 @@ package com.mulesoft.examples.jms_message_rollback_and_redelivery.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -43,7 +44,9 @@ import com.mulesoft.examples.jms_message_rollback_and_redelivery.exception.MyExc
 /**
  * Mockito unit tests of {@link RedeliveryService}, the body of the flow {@code JMSRedeliver}
  * [jms-message-rollback-and-redelivery/src/main/app/jms-redelivery.xml:21-48], of {@link MyException} and of the
- * beans of {@link JmsConfig}. Decisions: D-024, D-049, D-465.
+ * beans of {@link JmsConfig}. Decisions: D-024 (redelivery, rollback and commit), D-049 (JaCoCo line coverage floor
+ * of package {@code service}, which these tests reach without any other test class) and D-465 (dead-letter hand-off
+ * and connector redelivery check).
  *
  * <p>No Spring context and no broker start. Both {@link JmsTemplate}s are Mockito mocks, the service is built with
  * the topic {@code topic1} and the connector redelivery limit 5, and the payload is {@code Message123}. The INFO
@@ -176,14 +179,15 @@ public class RedeliveryServiceTest {
      *
      * @param deliveryCount the {@code JMSXDeliveryCount} of the delivery
      */
-    @ParameterizedTest
+    @ParameterizedTest(name = "delivery {0} throws MyException and logs the rollback text")
     @ValueSource(ints = {1, 2, 3, 4})
     @DisplayName("deliveries 1 to 4 throw MyException, log the rollback text and publish nothing")
     public void deliveriesOneToFourRollBack(int deliveryCount) {
-        Throwable thrown = catchThrowable(() -> service.jmsRedeliver(PAYLOAD, deliveryCount));
+        assertThatThrownBy(() -> service.jmsRedeliver(PAYLOAD, deliveryCount))
+                .isExactlyInstanceOf(MyException.class)
+                .hasNoCause()
+                .satisfies(thrown -> assertThat(((MyException) thrown).getError()).isEqualTo("test"));
 
-        assertThat(thrown).isExactlyInstanceOf(MyException.class).hasNoCause();
-        assertThat(((MyException) thrown).getError()).isEqualTo("test");
         assertThat(infoMessages()).containsExactly(ROLLBACK_TEXT);
         verifyNoInteractions(topicJmsTemplate, queueJmsTemplate);
     }

@@ -80,7 +80,7 @@
                 </configuration>
             </plugin>
 
-            <!-- Tier 1 unit and scheduler tests -->
+            <!-- Tier 1 unit and scheduler tests; sun.net.http.retryPost=false (D-020, D-612) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -88,10 +88,13 @@
                     <excludes>
                         <exclude>**/*IT.java</exclude>
                     </excludes>
+                    <systemPropertyVariables>
+                        <sun.net.http.retryPost>false</sun.net.http.retryPost>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
 
-            <!-- Tier 2B integration tests (D-021) -->
+            <!-- Tier 2B integration tests (D-021); sun.net.http.retryPost=false (D-020, D-612) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
@@ -99,6 +102,9 @@
                     <includes>
                         <include>**/*IT.java</include>
                     </includes>
+                    <systemPropertyVariables>
+                        <sun.net.http.retryPost>false</sun.net.http.retryPost>
+                    </systemPropertyVariables>
                 </configuration>
                 <executions>
                     <execution>

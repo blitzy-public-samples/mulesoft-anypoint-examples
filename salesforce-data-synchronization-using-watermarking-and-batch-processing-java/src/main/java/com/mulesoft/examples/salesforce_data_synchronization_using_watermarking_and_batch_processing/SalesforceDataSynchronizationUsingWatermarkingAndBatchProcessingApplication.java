@@ -16,11 +16,13 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class SalesforceDataSynchronizationUsingWatermarkingAndBatchProcessingApplication {
 
     /**
-     * Runs the application with the given command-line arguments.
+     * Disables {@code HttpURLConnection} POST retries (D-020, D-612), then runs the application with the given
+     * command-line arguments.
      *
      * @param args command-line arguments handed to {@link SpringApplication#run(Class, String...)}
      */
     public static void main(String[] args) {
+        System.setProperty("sun.net.http.retryPost", "false");
         SpringApplication.run(SalesforceDataSynchronizationUsingWatermarkingAndBatchProcessingApplication.class, args);
     }
 }

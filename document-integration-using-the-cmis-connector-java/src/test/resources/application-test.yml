@@ -1,0 +1,10 @@
+# Test profile: values for the in-JVM CMIS AtomPub stub, CmisAtomPubStub on MockWebServer (D-012, D-039).
+# The profile sets CMIS connection values only; logger levels keep Spring Boot's defaults.
+cmis:
+  # Placeholder CMIS AtomPub URL that no test contacts; each test that calls CMIS sets the stub URL
+  # through @DynamicPropertySource (D-039)
+  base-url: http://localhost:1/cmis/atom
+  # MockWebServer stub user (D-012)
+  username: test-user
+  # MockWebServer stub password (D-012)
+  password: test-password
